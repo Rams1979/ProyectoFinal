@@ -1,0 +1,20 @@
+{% extends "hotel/base.html" %}
+{% block contenido %}
+  <h2>Disponibilidad</h2>
+  <form class="filtros" method="get">
+    <label>Entrada <input type="date" name="entrada" value="{{ entrada_txt }}" min="{{ hoy }}" required></label>
+    <label>Salida <input type="date" name="salida" value="{{ salida_txt }}" min="{{ hoy }}" required></label>
+    <button type="submit">Buscar</button>
+  </form>
+  {% if error %}<p class="error">{{ error }}</p>{% endif %}
+  {% if buscado %}
+    <h3>Habitaciones libres ({{ libres|length }}) · {{ noches }} noche{{ noches|pluralize }}</h3>
+    <ul class="lista">
+      {% for h, total in libres %}
+        <li><span>{{ h }}</span><span>${{ total|floatformat:0 }} total</span></li>
+      {% empty %}
+        <li>No hay habitaciones libres para esas fechas.</li>
+      {% endfor %}
+    </ul>
+  {% endif %}
+{% endblock %}

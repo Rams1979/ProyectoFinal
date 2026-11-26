@@ -2,6 +2,11 @@
 
 Prototipo con datos de ejemplo (no es un sistema para operar el hotel). Django + PostgreSQL en Railway.
 
+## Etapa 1: disponibilidad por fechas
+- `/disponibilidad/`: entrada y salida, lista las habitaciones libres con el total de las noches.
+- Una habitación con reserva traslapada no aparece; el día de salida queda libre.
+- Modelo `Reserva` (la pantalla de reserva llega en la etapa 2).
+
 ## Etapa 0: fundamentos
 - Esqueleto Django con conexión a PostgreSQL (`DATABASE_URL`).
 - 30 habitaciones pequeñas a $30 por noche, cargadas por migración.

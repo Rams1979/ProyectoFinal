@@ -4,4 +4,5 @@ from hotel import views
 
 urlpatterns = [
     path("", views.inicio, name="inicio"),
+    path("disponibilidad/", views.disponibilidad, name="disponibilidad"),
 ]
