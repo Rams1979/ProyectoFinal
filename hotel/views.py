@@ -1,11 +1,15 @@
+import json
 from datetime import date
 
 from django.db import transaction
+from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
+from django.views.decorators.http import require_POST
 
+from .chat import responder as chat_responder
 from .disponibilidad import habitaciones_libres
-from .models import Habitacion, Reserva
+from .models import Habitacion, Reserva, SolicitudContacto
 
 
 def inicio(request):
@@ -100,3 +104,22 @@ def reservaciones(request):
         for r in Reserva.objects.select_related("habitacion")
     ]
     return render(request, "hotel/reservaciones.html", {"filas": filas})
+
+
+def chat(request):
+    return render(request, "hotel/chat.html")
+
+
+@require_POST
+def chat_mensaje(request):
+    try:
+        historial = json.loads(request.body).get("historial", [])
+    except (ValueError, AttributeError):
+        return JsonResponse({"error": "Solicitud inválida."}, status=400)
+    if not isinstance(historial, list):
+        return JsonResponse({"error": "Solicitud inválida."}, status=400)
+    return JsonResponse({"respuesta": chat_responder(historial)})
+
+
+def solicitudes(request):
+    return render(request, "hotel/solicitudes.html", {"solicitudes": SolicitudContacto.objects.all()})

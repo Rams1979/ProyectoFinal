@@ -1,0 +1,33 @@
+{% extends "hotel/base.html" %}
+{% block contenido %}
+  <h2>Chat del hotel</h2>
+  <div id="msgs" aria-live="polite"></div>
+  <form id="f" class="filtros">
+    {% csrf_token %}
+    <label style="flex:1">Escriba su mensaje <input id="entrada" maxlength="500" autocomplete="off" required></label>
+    <button type="submit">Enviar</button>
+  </form>
+  <p class="nota">Responde con la información del hotel y consulta disponibilidad. No crea reservas: para reservar use la página de disponibilidad.</p>
+  <script>
+    const msgs = document.getElementById("msgs"), f = document.getElementById("f"), entrada = document.getElementById("entrada");
+    const token = f.querySelector("[name=csrfmiddlewaretoken]").value;
+    const historial = [];
+    function pinta(rol, texto) {
+      const d = document.createElement("div");
+      d.className = "burbuja " + (rol === "user" ? "yo" : "bot");
+      d.textContent = texto; msgs.appendChild(d); msgs.scrollTop = msgs.scrollHeight;
+    }
+    pinta("assistant", "Hola, soy el asistente de Inu no Hoteru. Puedo contarle de los servicios, los requisitos y consultar disponibilidad por fechas.");
+    f.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const texto = entrada.value.trim(); if (!texto) return;
+      entrada.value = ""; pinta("user", texto); historial.push({role: "user", content: texto});
+      try {
+        const r = await fetch("{% url 'chat_mensaje' %}", {method: "POST",
+          headers: {"Content-Type": "application/json", "X-CSRFToken": token}, body: JSON.stringify({historial})});
+        const j = await r.json(); const resp = j.respuesta || "No pude responder.";
+        pinta("assistant", resp); historial.push({role: "assistant", content: resp});
+      } catch (err) { pinta("assistant", "No hay conexión. Intente de nuevo."); }
+    });
+  </script>
+{% endblock %}

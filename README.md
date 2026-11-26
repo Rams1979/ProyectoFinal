@@ -2,6 +2,11 @@
 
 Prototipo con datos de ejemplo (no es un sistema para operar el hotel). Django + PostgreSQL en Railway.
 
+## Etapa 3: chatbot sencillo
+- `/chat/`: responde con la información de `hotel/conocimiento.md`, consulta disponibilidad y toma nombre y teléfono para la persona de turno (`/solicitudes/`). No crea reservas.
+- Lo que dice POR DEFINIR en `conocimiento.md` el chat no lo inventa: lo deriva a la persona de turno. Al completar ese archivo el chat responde con los datos nuevos.
+- Variable en Railway: `ANTHROPIC_API_KEY` (opcional `CHAT_MODEL`). Sin la clave, el chat avisa que no está disponible y el resto del sitio funciona.
+
 ## Etapa 2: reserva y reservaciones
 - Botón Reservar en cada habitación libre; el cliente escribe nombre y teléfono y confirma.
 - La reserva queda confirmada y se da por pagada. La habitación se bloquea para evitar reservas traslapadas.
