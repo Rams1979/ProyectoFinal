@@ -2,6 +2,11 @@
 
 Prototipo con datos de ejemplo (no es un sistema para operar el hotel). Django + PostgreSQL en Railway.
 
+## Etapa 2: reserva y reservaciones
+- Botón Reservar en cada habitación libre; el cliente escribe nombre y teléfono y confirma.
+- La reserva queda confirmada y se da por pagada. La habitación se bloquea para evitar reservas traslapadas.
+- `/reservaciones/`: lista de todas las reservaciones (sin inicio de sesión).
+
 ## Etapa 1: disponibilidad por fechas
 - `/disponibilidad/`: entrada y salida, lista las habitaciones libres con el total de las noches.
 - Una habitación con reserva traslapada no aparece; el día de salida queda libre.

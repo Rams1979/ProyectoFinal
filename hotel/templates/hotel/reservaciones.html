@@ -1,0 +1,13 @@
+{% extends "hotel/base.html" %}
+{% block contenido %}
+  <h2>Reservaciones ({{ filas|length }})</h2>
+  <table>
+    <tr><th>Cliente</th><th>Habitación</th><th>Entrada</th><th>Salida</th><th>Total</th><th>Estado</th></tr>
+    {% for r, noches, total in filas %}
+      <tr><td>{{ r.nombre }}<br><small>{{ r.telefono }}</small></td><td>{{ r.habitacion }}</td><td>{{ r.entrada|date:"d/m/Y" }}</td><td>{{ r.salida|date:"d/m/Y" }}</td><td>${{ total|floatformat:0 }}</td><td>Confirmada</td></tr>
+    {% empty %}
+      <tr><td colspan="6">Todavía no hay reservaciones.</td></tr>
+    {% endfor %}
+  </table>
+  <p class="nota">Página sin inicio de sesión. Datos de ejemplo.</p>
+{% endblock %}

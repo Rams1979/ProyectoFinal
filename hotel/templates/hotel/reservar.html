@@ -1,0 +1,22 @@
+{% extends "hotel/base.html" %}
+{% block contenido %}
+  <h2>Reservar</h2>
+  {% if error %}<p class="error">{{ error }}</p>{% endif %}
+  {% if habitacion %}
+    <p><strong>{{ habitacion }}</strong><br>
+      Entrada {{ entrada_txt }} · Salida {{ salida_txt }} · {{ noches }} noche{{ noches|pluralize }}<br>
+      Total ${{ total|floatformat:0 }}</p>
+    {% if not bloqueado %}
+    <form class="filtros" method="post">
+      {% csrf_token %}
+      <input type="hidden" name="entrada" value="{{ entrada_txt }}">
+      <input type="hidden" name="salida" value="{{ salida_txt }}">
+      <label>Nombre completo <input name="nombre" value="{{ nombre }}" required></label>
+      <label>Teléfono <input name="telefono" value="{{ telefono }}" required></label>
+      <button type="submit">Confirmar reserva</button>
+    </form>
+    <p class="nota">Al confirmar, la reserva queda confirmada y se da por pagada (sin anticipo ni apartado).</p>
+    {% endif %}
+  {% endif %}
+  <p><a href="{% url 'disponibilidad' %}">Volver a disponibilidad</a></p>
+{% endblock %}
