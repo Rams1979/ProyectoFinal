@@ -2,6 +2,17 @@
 
 Resultado de las pruebas del recorrido completo. Lo que el prototipo hace a propósito sin resolver, y lo que se vio al probar.
 
+## Pendientes para revisar (anotados el 26/11/2026)
+- Política de devolución al cancelar y anticipo: por definir; hoy la cancelación solo libera la habitación.
+- Reservas falsas desde el sitio público: sin límite de uso ni confirmación; hoy el personal las cancela una por una.
+- Cancelación por el visitante: depende de su sesión; si cierra el navegador debe llamar al hotel.
+- Reactivar una reserva cancelada por error: no existe; se crea una nueva.
+- Cambio y recuperación de contraseña: no existen.
+- Bloqueo de login por usuario y en memoria de cada proceso (ver observaciones técnicas).
+- Chat sin límite de uso: consume saldo de la API; clave de Anthropic sin configurar todavía.
+- Repositorio público con teléfono y correo del hotel: decidir si pasa a privado.
+- Requisitos sanitarios finales con el veterinario y datos "POR DEFINIR" de `hotel/conocimiento.md`.
+
 ## Decisiones del prototipo (no son errores)
 - Sin registro de clientes ni de perros; la reserva pide nombre y teléfono y el nombre del perro se anota en el check-in.
 - Sin validación de vacunas ni fotos de recepción.
