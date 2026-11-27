@@ -18,6 +18,18 @@ class Habitacion(models.Model):
         ordering = ["numero"]
         verbose_name_plural = "habitaciones"
 
+    # Clasificación del perro (documento del caso de uso) y la habitación mínima que necesita.
+    TAMANOS_PERRO = [("pequeno", "Pequeño (hasta 10 kg)"), ("mediano", "Mediano (10 a 25 kg)"),
+                     ("grande", "Grande (25 a 45 kg)"), ("gigante", "Gigante (más de 45 kg)")]
+    ORDEN = {"pequena": 0, "mediana": 1, "grande": 2}
+    MINIMA = {"pequeno": "pequena", "mediano": "mediana", "grande": "grande", "gigante": "grande"}
+
+    @classmethod
+    def tamanos_para(cls, tamano_perro):
+        """Tamaños de habitación que admiten al perro: el suyo o uno mayor."""
+        minimo = cls.ORDEN[cls.MINIMA[tamano_perro]]
+        return [t for t, o in cls.ORDEN.items() if o >= minimo]
+
     PESOS = {"pequena": "Hasta 10 kg", "mediana": "Hasta 25 kg", "grande": "Desde 25 kg (admite gigantes)"}
 
     @property

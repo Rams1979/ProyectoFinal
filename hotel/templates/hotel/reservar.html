@@ -11,6 +11,7 @@
       {% csrf_token %}
       <input type="hidden" name="entrada" value="{{ entrada_txt }}">
       <input type="hidden" name="salida" value="{{ salida_txt }}">
+      <input type="hidden" name="perro_tam" value="{{ perro_tam }}">
       <label>Nombre completo <input name="nombre" value="{{ nombre }}" required></label>
       <label>Teléfono <input name="telefono" value="{{ telefono }}" required></label>
       <label>Nombre del perro <input name="perro" value="{{ perro }}" maxlength="80"></label>

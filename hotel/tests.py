@@ -1320,3 +1320,39 @@ class MaestroClientesTests(TestCase):
         self.assertEqual(self.client.get(f"/clientes/{c.pk}/editar/").status_code, 302)  # sin sesión
         entrar(self.client, "Cuidador", "cuco")
         self.assertEqual(self.client.get(f"/clientes/{c.pk}/editar/").status_code, 403)
+
+
+class TamanoPerroTests(TestCase):
+    def setUp(self):
+        self.e = timezone.localdate() + timedelta(days=3)
+        self.s = self.e + timedelta(days=2)
+        self.q = {"entrada": self.e.isoformat(), "salida": self.s.isoformat()}
+
+    def test_habitaciones_para_cada_tamano_de_perro(self):
+        cuenta = lambda t: habitaciones_libres(self.e, self.s, tamano_perro=t).count()
+        self.assertEqual((cuenta("pequeno"), cuenta("mediano"), cuenta("grande"), cuenta("gigante"), cuenta(None)), (30, 20, 10, 10, 30))
+        self.assertEqual(set(habitaciones_libres(self.e, self.s, tamano_perro="gigante").values_list("tamano", flat=True)), {"grande"})
+
+    def test_busqueda_filtra_y_conserva_el_tamano_en_el_enlace(self):
+        r = self.client.get("/disponibilidad/", {**self.q, "perro_tam": "mediano"})
+        self.assertContains(r, "Habitaciones libres (20)")
+        self.assertNotContains(r, "Pequeña (1 m²)")
+        self.assertContains(r, "perro_tam=mediano")
+        self.assertContains(self.client.get("/disponibilidad/", {**self.q, "perro_tam": "otro"}), "tamaño de perro válido")
+        self.assertContains(self.client.get("/disponibilidad/", self.q), "Habitaciones libres (30)")
+
+    def test_reservar_rechaza_habitacion_mas_pequena_que_el_perro(self):
+        chica = Habitacion.objects.get(numero=1)    # pequeña
+        grande = Habitacion.objects.get(numero=25)  # grande
+        datos = {**self.q, "nombre": "Ana", "telefono": "1", "perro": "Rex", "perro_tam": "grande"}
+        self.assertEqual(self.client.post(f"/reservar/{chica.pk}/", datos).status_code, 400)
+        self.assertEqual(Reserva.objects.count(), 0)
+        self.assertEqual(self.client.post(f"/reservar/{grande.pk}/", datos).status_code, 302)
+        # sin tamaño indicado no se valida (compatibilidad con el personal)
+        self.assertEqual(self.client.post(f"/reservar/{chica.pk}/", {**datos, "perro_tam": "", "telefono": "2"}).status_code, 302)
+
+    def test_chat_filtra_por_tamano(self):
+        from . import chat
+        r = chat.consultar_disponibilidad(self.e.isoformat(), self.s.isoformat(), "gigante")
+        self.assertEqual(r["habitaciones_libres"], 10)
+        self.assertIn("error", chat.consultar_disponibilidad(self.e.isoformat(), self.s.isoformat(), "enorme"))

@@ -25,6 +25,8 @@ Resultado de las pruebas del recorrido completo. Lo que el prototipo hace a prop
 
 - Maestro de clientes: ya tiene los campos del CU-02 del documento (identificación, WhatsApp, dirección, contacto de emergencia, persona autorizada para retirar, autorización veterinaria con monto máximo, consentimientos con fechas, facturación, estado, cómo nos conoció, baño en estadías largas, descuento y canal preferido). Solo nombre y teléfono son obligatorios, aunque el documento marca otros como "Base" (identificación, correo, dirección, contacto de emergencia), para no frenar las reservas rápidas. El descuento solo lo edita el administrador, pero todavía no se aplica a ningún total (no hay facturación); un cliente "bloqueado" solo muestra un aviso, no impide reservar; los avisos por WhatsApp o correo y su historial no existen.
 
+- Tamaño del perro: la búsqueda de disponibilidad y el chat filtran por el tamaño del perro (pequeño, mediano, grande, gigante) y ofrecen su habitación o una mayor; la reserva lo valida. El perro registrado todavía no guarda peso ni tamaño (el cliente lo elige al buscar) y no hay límite de dos perros por tamaño de habitación.
+
 ## Decisiones del prototipo (no son errores)
 - Sin registro de clientes ni de perros; la reserva pide nombre y teléfono y el nombre del perro se anota en el check-in.
 - Sin validación de vacunas ni fotos de recepción.

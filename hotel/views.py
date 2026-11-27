@@ -75,17 +75,20 @@ def _validar_fechas(entrada, salida):
 
 
 def disponibilidad(request):
-    contexto = {"hoy": timezone.localdate().isoformat()}
+    contexto = {"hoy": timezone.localdate().isoformat(), "tamanos_perro": Habitacion.TAMANOS_PERRO}
     if request.GET:
         entrada = _fecha(request.GET.get("entrada"))
         salida = _fecha(request.GET.get("salida"))
-        contexto.update(entrada_txt=request.GET.get("entrada", ""), salida_txt=request.GET.get("salida", ""))
+        perro_tam = request.GET.get("perro_tam", "")
+        contexto.update(entrada_txt=request.GET.get("entrada", ""), salida_txt=request.GET.get("salida", ""), perro_tam=perro_tam)
         error = _validar_fechas(entrada, salida)
+        if not error and perro_tam and perro_tam not in dict(Habitacion.TAMANOS_PERRO):
+            error = "Elija un tamaño de perro válido."
         if error:
             contexto["error"] = error
         else:
             noches = (salida - entrada).days
-            libres = list(habitaciones_libres(entrada, salida))
+            libres = list(habitaciones_libres(entrada, salida, tamano_perro=perro_tam))
             contexto.update(
                 buscado=True,
                 noches=noches,
@@ -99,7 +102,8 @@ def reservar(request, habitacion_id):
     datos = request.POST if request.method == "POST" else request.GET
     entrada_txt, salida_txt = datos.get("entrada", ""), datos.get("salida", "")
     entrada, salida = _fecha(entrada_txt), _fecha(salida_txt)
-    contexto = {"entrada_txt": entrada_txt, "salida_txt": salida_txt}
+    perro_tam = datos.get("perro_tam", "")
+    contexto = {"entrada_txt": entrada_txt, "salida_txt": salida_txt, "perro_tam": perro_tam}
 
     error = _validar_fechas(entrada, salida)
     if error:
@@ -122,6 +126,10 @@ def reservar(request, habitacion_id):
                         perro=perro_nombre, perro2=perro2_nombre, recargo=settings.RECARGO_SEGUNDO_PERRO,
                         total=base * (1 + recargo) if perro2_nombre else base, total_con_segundo=base * (1 + recargo),
                         total_base=base, anticipo=settings.ANTICIPO_PORCENTAJE)
+        if perro_tam and (perro_tam not in dict(Habitacion.TAMANOS_PERRO) or habitacion.tamano not in Habitacion.tamanos_para(perro_tam)):
+            contexto["error"] = "Esa habitación es demasiado pequeña para el perro. Elija una de su tamaño o mayor."
+            contexto["bloqueado"] = True
+            return render(request, "hotel/reservar.html", contexto, status=400)
         if not libre:
             contexto["error"] = "Esa habitación ya no está libre para esas fechas. Elija otra."
             contexto["bloqueado"] = True

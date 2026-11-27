@@ -44,6 +44,8 @@ HERRAMIENTAS = [
             "properties": {
                 "entrada": {"type": "string", "description": "Fecha de entrada AAAA-MM-DD"},
                 "salida": {"type": "string", "description": "Fecha de salida AAAA-MM-DD, posterior a la entrada"},
+                "tamano_perro": {"type": "string", "enum": ["pequeno", "mediano", "grande", "gigante"],
+                                 "description": "Tamaño del perro: pequeño hasta 10 kg, mediano 10 a 25, grande 25 a 45, gigante más de 45. Solo se ofrecen habitaciones de su tamaño o mayor."},
             },
             "required": ["entrada", "salida"],
         },
@@ -64,7 +66,7 @@ HERRAMIENTAS = [
 ]
 
 
-def consultar_disponibilidad(entrada: str, salida: str) -> dict:
+def consultar_disponibilidad(entrada: str, salida: str, tamano_perro: str = None) -> dict:
     try:
         e, s = date.fromisoformat(entrada), date.fromisoformat(salida)
     except (TypeError, ValueError):
@@ -74,7 +76,9 @@ def consultar_disponibilidad(entrada: str, salida: str) -> dict:
     if s <= e:
         return {"error": "La salida debe ser posterior a la entrada."}
     noches = (s - e).days
-    disponibles = habitaciones_libres(e, s)
+    if tamano_perro and tamano_perro not in dict(Habitacion.TAMANOS_PERRO):
+        return {"error": "Tamaño de perro inválido; use pequeno, mediano, grande o gigante."}
+    disponibles = habitaciones_libres(e, s, tamano_perro=tamano_perro)
     libres = disponibles.count()
     tarifa = disponibles.order_by("tarifa_noche").values_list("tarifa_noche", flat=True).first() or 0  # la más baja entre las libres
     por_tamano = {}
@@ -100,7 +104,7 @@ def registrar_contacto(nombre: str, telefono: str, motivo: str = "") -> dict:
 
 def _ejecutar(nombre, datos):
     if nombre == "consultar_disponibilidad":
-        return consultar_disponibilidad(datos.get("entrada"), datos.get("salida"))
+        return consultar_disponibilidad(datos.get("entrada"), datos.get("salida"), datos.get("tamano_perro"))
     if nombre == "registrar_contacto":
         return registrar_contacto(datos.get("nombre"), datos.get("telefono"), datos.get("motivo", ""))
     return {"error": "Herramienta desconocida."}
