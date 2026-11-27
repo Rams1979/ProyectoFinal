@@ -43,7 +43,14 @@
 </head>
 <body>
   <h1>Inu no Hoteru 犬のホテル</h1>
-  <nav><a href="{% url 'inicio' %}">Menú</a><a href="{% url 'disponibilidad' %}">Disponibilidad</a><a href="{% url 'panel' %}">Panel</a><a href="{% url 'reservaciones' %}">Reservaciones</a><a href="{% url 'clientes' %}">Clientes</a><a href="{% url 'chat' %}">Chat</a><a href="{% url 'solicitudes' %}">Solicitudes</a></nav>
+  <nav>
+    {% if rol %}
+      <a href="{% url 'inicio' %}">Menú</a><a href="{% url 'disponibilidad' %}">Disponibilidad</a><a href="{% url 'panel' %}">Panel</a><a href="{% url 'reservaciones' %}">Reservaciones</a><a href="{% url 'clientes' %}">Clientes</a><a href="{% url 'chat' %}">Chat</a>{% if es_admin %}<a href="{% url 'solicitudes' %}">Solicitudes</a><a href="{% url 'usuarios' %}">Usuarios</a>{% endif %}
+      <form class="en-linea" method="post" action="{% url 'logout' %}">{% csrf_token %}<button class="chico" type="submit">Salir ({{ user.username }} · {{ rol }})</button></form>
+    {% else %}
+      <a href="{% url 'inicio' %}">Inicio</a><a href="{% url 'disponibilidad' %}">Disponibilidad</a><a href="{% url 'chat' %}">Chat</a><a href="{% url 'login' %}">Ingreso del personal</a>
+    {% endif %}
+  </nav>
   <p class="nota">Prototipo conceptual con datos de ejemplo.</p>
   {% block contenido %}{% endblock %}
 </body>

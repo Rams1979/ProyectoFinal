@@ -7,6 +7,14 @@ Prototipo con datos de ejemplo (no es un sistema para operar el hotel). Django +
 - Check-in desde el panel (pide el nombre del perro); check-out cierra la estancia y deja la habitación en limpieza hasta marcarla disponible.
 - El check-out anticipado libera las fechas restantes. No se hace check-in antes de la fecha de entrada ni si la habitación está en limpieza.
 
+## Etapa 7: inicio de sesión y roles
+- Público (sin sesión): inicio, disponibilidad, reserva y su confirmación (solo la que el visitante hizo en su sesión) y chat.
+- **Recepción:** panel, check-in/out, reservaciones, clientes y habitaciones.
+- **Administrador:** lo anterior más solicitudes de contacto y usuarios.
+- Cada reserva guarda quién la creó y quién hizo el check-in y el check-out (se ve en Reservaciones).
+- Contraseñas de 10 o más caracteres, sesión de 12 horas y bloqueo de 15 minutos tras 5 intentos fallidos por usuario.
+- Primer administrador: variables `ADMIN_USERNAME` y `ADMIN_PASSWORD` en Railway; el arranque lo crea una sola vez (`crear_admin`). Luego se pueden quitar las variables.
+
 ## Menú principal
 - `/` es el menú con acceso a todas las pantallas y un dato vivo en cada una. La lista de habitaciones pasó a `/habitaciones/`.
 

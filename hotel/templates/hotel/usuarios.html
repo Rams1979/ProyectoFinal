@@ -1,0 +1,20 @@
+{% extends "hotel/base.html" %}
+{% block contenido %}
+  <h2>Usuarios</h2>
+  {% if error %}<p class="error">{{ error }}</p>{% endif %}
+  <table>
+    <tr><th>Usuario</th><th>Rol</th><th>Estado</th><th></th></tr>
+    {% for f in filas %}
+      <tr><td>{{ f.u.username }}</td><td>{{ f.rol }}</td><td>{% if f.u.is_active %}Activo{% else %}Desactivado{% endif %}</td>
+        <td>{% if f.u.pk != user.pk %}<form class="en-linea" method="post" action="{% url 'usuario_activo' f.u.pk %}">{% csrf_token %}<button class="chico" type="submit">{% if f.u.is_active %}Desactivar{% else %}Activar{% endif %}</button></form>{% endif %}</td></tr>
+    {% endfor %}
+  </table>
+  <h3>Nuevo usuario</h3>
+  <form class="filtros" method="post">
+    {% csrf_token %}
+    <label>Usuario <input name="username" required></label>
+    <label>Contraseña (mínimo 10 caracteres) <input type="password" name="password" autocomplete="new-password" required></label>
+    <label>Rol <select name="rol">{% for r in roles %}<option>{{ r }}</option>{% endfor %}</select></label>
+    <button type="submit">Crear</button>
+  </form>
+{% endblock %}

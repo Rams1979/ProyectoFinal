@@ -1,0 +1,8 @@
+{% extends "hotel/base.html" %}
+{% block contenido %}
+  <h2>Bienvenido</h2>
+  <ul class="menu">
+    <li><a href="{% url 'disponibilidad' %}"><strong>Disponibilidad y reserva</strong><small>Elija fechas, vea las habitaciones libres y reserve.</small></a></li>
+    <li><a href="{% url 'chat' %}"><strong>Chat</strong><small>Pregunte por servicios, requisitos y tarifas.</small></a></li>
+  </ul>
+{% endblock %}

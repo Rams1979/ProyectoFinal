@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.db import models
 
 
@@ -90,6 +91,9 @@ class Reserva(models.Model):
     cliente = models.ForeignKey(Cliente, null=True, blank=True, on_delete=models.PROTECT, related_name="reservas")
     perro_ref = models.ForeignKey(Perro, null=True, blank=True, on_delete=models.PROTECT, related_name="reservas")
     perro = models.CharField(max_length=80, blank=True)  # nombre; si no vino en la reserva se pide en el check-in
+    creada_por = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="+")  # vacío si reservó el cliente solo
+    checkin_por = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
+    checkout_por = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
     checkin_en = models.DateTimeField(null=True, blank=True)
     checkout_en = models.DateTimeField(null=True, blank=True)
 

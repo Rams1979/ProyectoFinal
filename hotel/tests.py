@@ -7,6 +7,18 @@ from .disponibilidad import habitaciones_libres
 from .models import Habitacion, Reserva
 
 
+from django.contrib.auth.models import Group, User
+
+
+def entrar(client, rol="Recepción", nombre=None):
+    """Crea un usuario con el rol dado y abre sesión."""
+    nombre = nombre or f"u-{rol[:3].lower()}"
+    u = User.objects.create_user(nombre, password="clave-de-prueba-1")
+    u.groups.add(Group.objects.get(name=rol))
+    client.force_login(u)
+    return u
+
+
 class DisponibilidadTests(TestCase):
     def setUp(self):
         self.hoy = timezone.localdate()
@@ -50,8 +62,9 @@ class ReservaTests(TestCase):
         r = self.client.post(f"/reservar/{self.h1.pk}/", self.datos)
         self.assertEqual(r.status_code, 302)
         self.assertEqual(Reserva.objects.count(), 1)
+        self.assertContains(self.client.get(r.url), "pagada")  # el visitante ve su propia confirmación
+        entrar(self.client)
         self.assertContains(self.client.get("/reservaciones/"), "Ana")
-        self.assertContains(self.client.get(r.url), "pagada")
 
     def test_no_se_puede_reservar_dos_veces_las_mismas_fechas(self):
         self.client.post(f"/reservar/{self.h1.pk}/", self.datos)
@@ -115,6 +128,7 @@ class ChatTests(TestCase):
         self.assertTrue(chat_mod.registrar_contacto("Ana", "8888-0000", "dudas")["ok"])
         self.assertEqual(SolicitudContacto.objects.count(), 1)
         self.assertIn("error", chat_mod.registrar_contacto("", ""))
+        entrar(self.client, "Administrador")
         self.assertContains(self.client.get("/solicitudes/"), "Ana")
 
     def test_ciclo_con_herramienta(self):
@@ -158,7 +172,6 @@ class RecorridoCompletoTests(TestCase):
         self.assertContains(r, "Reserva confirmada")
         self.assertContains(r, "pagada")
 
-        self.assertContains(self.client.get("/reservaciones/"), "Luis")
         r = self.client.get("/disponibilidad/", {"entrada": entrada, "salida": salida})
         self.assertContains(r, "Habitaciones libres (29)")
 
@@ -173,6 +186,9 @@ class RecorridoCompletoTests(TestCase):
                              content_type="application/json")
         self.assertEqual(r.status_code, 200)
 
+        entrar(self.client)
+        self.assertContains(self.client.get("/reservaciones/"), "Luis")
+
     def test_limpiar_demo_conserva_habitaciones(self):
         d = timezone.localdate() + timedelta(days=2)
         Reserva.objects.create(habitacion=Habitacion.objects.get(numero=1), nombre="A", telefono="1",
@@ -186,6 +202,7 @@ class RecorridoCompletoTests(TestCase):
 
 class OcupacionTests(TestCase):
     def setUp(self):
+        entrar(self.client)
         self.hoy = timezone.localdate()
         self.h = Habitacion.objects.get(numero=3)
 
@@ -240,6 +257,7 @@ class OcupacionTests(TestCase):
 
 class ClientesTests(TestCase):
     def setUp(self):
+        entrar(self.client)
         self.hoy = timezone.localdate()
 
     def _reservar(self, perro="Rocky", tel="8888", hab=1):
@@ -292,8 +310,102 @@ class ClientesTests(TestCase):
 
 class MenuTests(TestCase):
     def test_menu_enlaza_todas_las_pantallas(self):
+        entrar(self.client, "Administrador")
         r = self.client.get("/")
-        for url in ("/panel/", "/disponibilidad/", "/reservaciones/", "/clientes/", "/chat/", "/solicitudes/", "/habitaciones/"):
+        for url in ("/panel/", "/disponibilidad/", "/reservaciones/", "/clientes/", "/chat/", "/solicitudes/", "/habitaciones/", "/usuarios/"):
             self.assertContains(r, f'href="{url}"')
             self.assertEqual(self.client.get(url).status_code, 200)
         self.assertContains(self.client.get("/habitaciones/"), "Habitaciones (30)")
+
+
+class AccesoTests(TestCase):
+    PRIVADAS = ["/panel/", "/reservaciones/", "/clientes/", "/clientes/nuevo/", "/habitaciones/", "/solicitudes/", "/usuarios/"]
+
+    def test_visitante_solo_ve_disponibilidad_y_chat(self):
+        for url in self.PRIVADAS:
+            r = self.client.get(url)
+            self.assertEqual(r.status_code, 302, url)
+            self.assertIn("/ingresar/", r.url)
+        for url in ("/", "/disponibilidad/", "/chat/", "/ingresar/"):
+            self.assertEqual(self.client.get(url).status_code, 200, url)
+        self.assertNotContains(self.client.get("/"), "Panel de ocupación")
+        # check-in y check-out no se pueden hacer sin sesión
+        d = timezone.localdate()
+        res = Reserva.objects.create(habitacion=Habitacion.objects.get(numero=1), nombre="A", telefono="1", entrada=d, salida=d + timedelta(days=1))
+        self.assertEqual(self.client.post(f"/checkin/{res.pk}/", {"perro": "X"}).status_code, 302)
+        self.assertEqual(self.client.post(f"/checkout/{res.pk}/").status_code, 302)
+        res.refresh_from_db()
+        self.assertEqual(res.estado, "confirmada")
+
+    def test_confirmacion_solo_para_quien_reservo(self):
+        d = timezone.localdate() + timedelta(days=3)
+        ajena = Reserva.objects.create(habitacion=Habitacion.objects.get(numero=2), nombre="Otra", telefono="9", entrada=d, salida=d + timedelta(days=1))
+        self.assertEqual(self.client.get(f"/reserva/{ajena.pk}/").status_code, 403)
+
+    def test_recepcion_no_ve_solicitudes_ni_usuarios(self):
+        entrar(self.client, "Recepción")
+        self.assertEqual(self.client.get("/panel/").status_code, 200)
+        self.assertEqual(self.client.get("/solicitudes/").status_code, 403)
+        self.assertEqual(self.client.get("/usuarios/").status_code, 403)
+        self.assertNotContains(self.client.get("/"), "Solicitudes de contacto")
+
+    def test_usuario_sin_rol_no_entra(self):
+        User.objects.create_user("sinrol", password="clave-de-prueba-1")
+        r = self.client.post("/ingresar/", {"username": "sinrol", "password": "clave-de-prueba-1"})
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(self.client.get("/panel/").status_code, 302)
+
+    def test_login_logout_y_auditoria(self):
+        u = User.objects.create_user("rita", password="clave-de-prueba-1")
+        u.groups.add(Group.objects.get(name="Recepción"))
+        self.assertEqual(self.client.post("/ingresar/", {"username": "rita", "password": "mala"}).status_code, 400)
+        r = self.client.post("/ingresar/?next=/panel/", {"username": "rita", "password": "clave-de-prueba-1"})
+        self.assertEqual((r.status_code, r.url), (302, "/panel/"))
+        # redirección externa no permitida
+        self.client.post("/salir/")
+        r = self.client.post("/ingresar/?next=//evil.com", {"username": "rita", "password": "clave-de-prueba-1"})
+        self.assertEqual(r.url, "/")
+        d = timezone.localdate()
+        res = Reserva.objects.create(habitacion=Habitacion.objects.get(numero=1), nombre="A", telefono="1", entrada=d, salida=d + timedelta(days=1))
+        self.client.post(f"/checkin/{res.pk}/", {"perro": "Rocky"})
+        self.client.post(f"/checkout/{res.pk}/")
+        res.refresh_from_db()
+        self.assertEqual((res.checkin_por, res.checkout_por), (u, u))
+        self.client.post("/salir/")
+        self.assertEqual(self.client.get("/panel/").status_code, 302)
+
+    def test_bloqueo_tras_intentos_fallidos(self):
+        from django.core.cache import cache
+        cache.clear()
+        u = User.objects.create_user("beto", password="clave-de-prueba-1")
+        u.groups.add(Group.objects.get(name="Recepción"))
+        for _ in range(5):
+            self.client.post("/ingresar/", {"username": "beto", "password": "mala"})
+        r = self.client.post("/ingresar/", {"username": "beto", "password": "clave-de-prueba-1"})
+        self.assertContains(r, "Demasiados intentos", status_code=400)
+        cache.clear()
+
+    def test_admin_crea_y_desactiva_usuarios(self):
+        admin = entrar(self.client, "Administrador")
+        malo = self.client.post("/usuarios/", {"username": "nuevo", "password": "corta", "rol": "Recepción"})
+        self.assertEqual(malo.status_code, 400)
+        ok = self.client.post("/usuarios/", {"username": "nuevo", "password": "una-clave-larga-1", "rol": "Recepción"})
+        self.assertEqual(ok.status_code, 302)
+        nuevo = User.objects.get(username="nuevo")
+        self.client.post(f"/usuarios/{nuevo.pk}/activo/")
+        nuevo.refresh_from_db()
+        self.assertFalse(nuevo.is_active)
+        self.client.post(f"/usuarios/{admin.pk}/activo/")  # no se desactiva a sí mismo
+        admin.refresh_from_db()
+        self.assertTrue(admin.is_active)
+
+    def test_crear_admin_desde_variables(self):
+        import os
+        from io import StringIO
+        os.environ.update(ADMIN_USERNAME="jefe", ADMIN_PASSWORD="otra-clave-larga-1")
+        try:
+            call_command("crear_admin", stdout=StringIO())
+            call_command("crear_admin", stdout=StringIO())  # idempotente
+        finally:
+            os.environ.pop("ADMIN_USERNAME"); os.environ.pop("ADMIN_PASSWORD")
+        self.assertEqual(User.objects.filter(username="jefe", is_superuser=True).count(), 1)

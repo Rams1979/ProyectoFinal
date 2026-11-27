@@ -1,6 +1,11 @@
 import json
 from datetime import date
 
+from django.contrib.auth import authenticate, login, logout
+from django.contrib.auth.forms import AuthenticationForm
+from django.contrib.auth.models import Group, User
+from django.contrib.auth.password_validation import validate_password
+from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
 from django.db.models import Q
 from django.http import JsonResponse
@@ -9,12 +14,17 @@ from django.utils import timezone
 from django.views.decorators.http import require_POST
 
 from .chat import responder as chat_responder
+from . import acceso
 from .disponibilidad import habitaciones_libres
+from .permisos import ADMIN, RECEPCION, ROLES, personal, rol, solo_admin
 from .models import Cliente, Habitacion, Perro, Reserva, SolicitudContacto, Vacuna
 
 
 def inicio(request):
-    """Menú principal: acceso a todas las pantallas, con un dato vivo en cada una."""
+    """Visitante: página pública. Personal: menú principal según su rol."""
+    mi_rol = rol(request.user)
+    if mi_rol is None:
+        return render(request, "hotel/publica.html")
     hoy = timezone.localdate()
     ocupadas = Reserva.objects.filter(estado=Reserva.ACTIVA).count()
     llegan = Reserva.objects.filter(estado=Reserva.CONFIRMADA, entrada=hoy).count()
@@ -24,12 +34,15 @@ def inicio(request):
         ("reservaciones", "Reservaciones", f"{Reserva.objects.exclude(estado=Reserva.CERRADA).count()} vigentes", "Lista de reservas con su estado."),
         ("clientes", "Clientes y perros", f"{Cliente.objects.count()} clientes", "Fichas, perros y requisitos sanitarios."),
         ("chat", "Chat", "Asistente del hotel", "Preguntas frecuentes y disponibilidad."),
-        ("solicitudes", "Solicitudes de contacto", f"{SolicitudContacto.objects.count()} recibidas", "Datos que dejaron clientes en el chat."),
         ("habitaciones", "Habitaciones", f"{Habitacion.objects.count()} habitaciones", "Lista y tarifa por noche."),
     ]
+    if mi_rol == ADMIN:
+        menu.insert(5, ("solicitudes", "Solicitudes de contacto", f"{SolicitudContacto.objects.count()} recibidas", "Datos que dejaron clientes en el chat."))
+        menu.append(("usuarios", "Usuarios", f"{User.objects.filter(is_active=True).count()} activos", "Crear y desactivar usuarios del personal."))
     return render(request, "hotel/inicio.html", {"menu": menu, "hoy": hoy})
 
 
+@personal
 def habitaciones(request):
     return render(request, "hotel/habitaciones.html", {"habitaciones": Habitacion.objects.all()})
 
@@ -110,18 +123,25 @@ def reservar(request, habitacion_id):
             reserva = Reserva.objects.create(
                 habitacion=habitacion, nombre=nombre, telefono=telefono, entrada=entrada, salida=salida,
                 cliente=cliente, perro_ref=perro_ref, perro=perro_nombre,
+                creada_por=request.user if rol(request.user) else None,
             )
+            propias = request.session.get("reservas_propias", [])
+            request.session["reservas_propias"] = (propias + [reserva.pk])[-20:]
             return redirect("reserva_confirmada", reserva_id=reserva.pk)
     return render(request, "hotel/reservar.html", contexto)
 
 
 def reserva_confirmada(request, reserva_id):
+    # Un visitante solo ve las confirmaciones de las reservas que hizo en esta sesión.
+    if rol(request.user) is None and reserva_id not in request.session.get("reservas_propias", []):
+        raise PermissionDenied
     reserva = get_object_or_404(Reserva, pk=reserva_id)
     noches = (reserva.salida - reserva.entrada).days
     return render(request, "hotel/confirmada.html",
                   {"reserva": reserva, "noches": noches, "total": reserva.habitacion.tarifa_noche * noches})
 
 
+@personal
 def reservaciones(request):
     hoy = timezone.localdate()
     filas = [
@@ -146,6 +166,7 @@ def chat_mensaje(request):
     return JsonResponse({"respuesta": chat_responder(historial)})
 
 
+@solo_admin
 def solicitudes(request):
     return render(request, "hotel/solicitudes.html", {"solicitudes": SolicitudContacto.objects.all()})
 
@@ -173,6 +194,7 @@ def _estado_habitaciones(hoy):
     return filas
 
 
+@personal
 def panel(request):
     hoy = timezone.localdate()
     filas = _estado_habitaciones(hoy)
@@ -181,6 +203,7 @@ def panel(request):
     return render(request, "hotel/panel.html", {"filas": filas, "cuenta": cuenta, "hoy": hoy})
 
 
+@personal
 def checkin(request, reserva_id):
     hoy = timezone.localdate()
     with transaction.atomic():
@@ -219,11 +242,13 @@ def checkin(request, reserva_id):
             reserva.estado = Reserva.ACTIVA
             reserva.perro = perro[:80]
             reserva.checkin_en = timezone.now()
+            reserva.checkin_por = request.user
             reserva.save()
             return redirect("panel")
     return render(request, "hotel/checkin.html", contexto)
 
 
+@personal
 @require_POST
 def checkout(request, reserva_id):
     hoy = timezone.localdate()
@@ -232,6 +257,7 @@ def checkout(request, reserva_id):
         if reserva.estado == Reserva.ACTIVA:
             reserva.estado = Reserva.CERRADA
             reserva.checkout_en = timezone.now()
+            reserva.checkout_por = request.user
             if reserva.salida > hoy:  # salida anticipada: libera las fechas restantes
                 reserva.salida = hoy
             reserva.save()
@@ -240,12 +266,14 @@ def checkout(request, reserva_id):
     return redirect("panel")
 
 
+@personal
 @require_POST
 def limpieza_lista(request, habitacion_id):
     Habitacion.objects.filter(pk=habitacion_id).update(en_limpieza=False)
     return redirect("panel")
 
 
+@personal
 def clientes(request):
     q = request.GET.get("q", "").strip()
     lista = Cliente.objects.prefetch_related("perros")
@@ -254,6 +282,7 @@ def clientes(request):
     return render(request, "hotel/clientes.html", {"clientes": lista, "q": q})
 
 
+@personal
 def cliente_nuevo(request):
     error, datos = None, request.POST
     if request.method == "POST":
@@ -269,6 +298,7 @@ def cliente_nuevo(request):
                   status=400 if error else 200)
 
 
+@personal
 def cliente(request, cliente_id):
     c = get_object_or_404(Cliente.objects.prefetch_related("perros__vacunas"), pk=cliente_id)
     hoy = timezone.localdate()
@@ -299,3 +329,67 @@ def cliente(request, cliente_id):
     return render(request, "hotel/cliente.html",
                   {"c": c, "perros": perros, "tipos": Vacuna.TIPOS, "error": error, "hoy": hoy},
                   status=400 if error else 200)
+
+
+def login_vista(request):
+    if rol(request.user):
+        return redirect("inicio")
+    form = AuthenticationForm(request, data=request.POST or None)
+    error = None
+    if request.method == "POST":
+        usuario = request.POST.get("username", "")
+        if acceso.bloqueado(usuario):
+            error = "Demasiados intentos fallidos. Espere 15 minutos."
+        else:
+            u = authenticate(request, username=usuario, password=request.POST.get("password", ""))
+            if u is not None and rol(u):
+                acceso.limpiar(usuario)
+                login(request, u)
+                destino = request.GET.get("next", "")
+                if destino.startswith("/") and not destino.startswith("//"):
+                    return redirect(destino)
+                return redirect("inicio")
+            acceso.registrar_fallo(usuario)
+            error = "Usuario o contraseña incorrectos."
+    return render(request, "hotel/login.html", {"error": error}, status=400 if error else 200)
+
+
+@require_POST
+def logout_vista(request):
+    logout(request)
+    return redirect("inicio")
+
+
+@solo_admin
+def usuarios(request):
+    error = None
+    if request.method == "POST":
+        nombre = request.POST.get("username", "").strip()
+        clave = request.POST.get("password", "")
+        nombre_rol = request.POST.get("rol")
+        if not nombre or nombre_rol not in ROLES:
+            error = "Indique usuario y rol."
+        elif User.objects.filter(username__iexact=nombre).exists():
+            error = "Ese usuario ya existe."
+        else:
+            try:
+                validate_password(clave)
+            except ValidationError as e:
+                error = " ".join(e.messages)
+        if not error:
+            u = User.objects.create_user(username=nombre, password=clave)
+            u.groups.add(Group.objects.get_or_create(name=nombre_rol)[0])
+            return redirect("usuarios")
+    filas = [{"u": u, "rol": rol(u) or "Sin rol"} for u in User.objects.order_by("username")]
+    return render(request, "hotel/usuarios.html", {"filas": filas, "roles": ROLES, "error": error},
+                  status=400 if error else 200)
+
+
+@solo_admin
+@require_POST
+def usuario_activo(request, usuario_id):
+    u = get_object_or_404(User, pk=usuario_id)
+    if u.pk != request.user.pk:  # nadie se desactiva a sí mismo
+        u.is_active = not u.is_active
+        u.save(update_fields=["is_active"])
+    return redirect("usuarios")

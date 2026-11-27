@@ -5,7 +5,7 @@ Resultado de las pruebas del recorrido completo. Lo que el prototipo hace a prop
 ## Decisiones del prototipo (no son errores)
 - Sin inicio de sesión: `/reservaciones/` y `/solicitudes/` las ve cualquiera con el enlace, con nombres y teléfonos.
 - Sin registro de clientes ni de perros; la reserva pide nombre y teléfono y el nombre del perro se anota en el check-in.
-- Check-in, check-out y panel sin inicio de sesión: cualquiera con el enlace puede hacerlos. Sin validación de vacunas ni fotos de recepción.
+- Sin validación de vacunas ni fotos de recepción.
 - Todas las habitaciones son iguales (pequeñas, $30 por noche); la tarifa es un valor de ejemplo en la base.
 - La reserva se da por pagada: no hay anticipo, cobro ni facturación.
 - El chat no crea reservas; necesita `ANTHROPIC_API_KEY` y, sin ella, avisa que no está disponible.
@@ -22,4 +22,5 @@ Se completan en `hotel/conocimiento.md`.
 - No hay cancelación ni edición de reservas.
 - `limpiar_demo` borra las reservas y solicitudes de prueba antes de la demostración (`python manage.py limpiar_demo`).
 
-- Etapa 6: los requisitos sanitarios (5 tipos) son los del chat; la versión final del veterinario sigue POR DEFINIR. Sin adjuntar carné ni fotos. Clientes identificados solo por teléfono, sin edición ni borrado. Datos personales de clientes y perros quedan visibles sin inicio de sesión.
+- Etapa 6: los requisitos sanitarios (5 tipos) son los del chat; la versión final del veterinario sigue POR DEFINIR. Sin adjuntar carné ni fotos. Clientes identificados solo por teléfono, sin edición ni borrado.
+- Etapa 7: sin cambio de contraseña propio (el administrador crea un usuario nuevo o desactiva el anterior); sin recuperación de contraseña. El bloqueo por intentos usa la memoria de cada proceso, así que con varios procesos el límite real es mayor; va por usuario, por lo que alguien podría bloquear a un usuario conocido 15 minutos. El chat y la reserva siguen públicos y sin límite de uso: pueden llenar la agenda de reservas falsas y consumir saldo de la API. Una reserva pública no se puede cancelar todavía.
