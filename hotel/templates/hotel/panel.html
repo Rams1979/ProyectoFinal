@@ -1,0 +1,31 @@
+{% extends "hotel/base.html" %}
+{% block contenido %}
+  <h2>Panel de ocupación · {{ hoy|date:"d/m/Y" }}</h2>
+  <div class="resumen">
+    <span><strong>{{ cuenta.ocupada }}</strong> ocupadas</span>
+    <span><strong>{{ cuenta.sale_hoy }}</strong> salen hoy</span>
+    <span><strong>{{ cuenta.llega }}</strong> por llegar</span>
+    <span><strong>{{ cuenta.limpieza }}</strong> en limpieza</span>
+    <span><strong>{{ cuenta.libre }}</strong> libres</span>
+  </div>
+  <ul class="panel">
+    {% for f in filas %}
+      <li class="{{ f.clave }}">
+        <strong>{{ f.hab }}</strong>
+        <span>{{ f.etiqueta }}</span>
+        {% if f.reserva %}
+          <span>{{ f.reserva.nombre }}{% if f.reserva.perro %} · perro {{ f.reserva.perro }}{% endif %}</span>
+          <span>{{ f.reserva.entrada|date:"d/m" }} a {{ f.reserva.salida|date:"d/m" }}</span>
+        {% endif %}
+        {% if f.clave == "llega" %}
+          <a class="boton" href="{% url 'checkin' f.reserva.pk %}">Check-in</a>
+        {% elif f.clave == "ocupada" %}
+          <form class="en-linea" method="post" action="{% url 'checkout' f.reserva.pk %}">{% csrf_token %}<button class="chico" type="submit">Check-out</button></form>
+        {% elif f.clave == "limpieza" %}
+          <form class="en-linea" method="post" action="{% url 'limpieza_lista' f.hab.pk %}">{% csrf_token %}<button class="chico" type="submit">Marcar disponible</button></form>
+        {% endif %}
+      </li>
+    {% endfor %}
+  </ul>
+  <p class="nota">Página sin inicio de sesión. Datos de ejemplo.</p>
+{% endblock %}

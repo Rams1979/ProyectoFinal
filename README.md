@@ -2,6 +2,11 @@
 
 Prototipo con datos de ejemplo (no es un sistema para operar el hotel). Django + PostgreSQL en Railway.
 
+## Etapa 5: check-in, check-out y panel de ocupación
+- `/panel/`: las 30 habitaciones con su estado de hoy (ocupada, sale hoy, por llegar, en limpieza, libre) y los totales.
+- Check-in desde el panel (pide el nombre del perro); check-out cierra la estancia y deja la habitación en limpieza hasta marcarla disponible.
+- El check-out anticipado libera las fechas restantes. No se hace check-in antes de la fecha de entrada ni si la habitación está en limpieza.
+
 ## Etapa 3: chatbot sencillo
 - `/chat/`: responde con la información de `hotel/conocimiento.md`, consulta disponibilidad y toma nombre y teléfono para la persona de turno (`/solicitudes/`). No crea reservas.
 - Lo que dice POR DEFINIR en `conocimiento.md` el chat no lo inventa: lo deriva a la persona de turno. Al completar ese archivo el chat responde con los datos nuevos.

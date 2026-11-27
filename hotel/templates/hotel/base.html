@@ -23,12 +23,22 @@
     .burbuja { padding: .5rem .75rem; border-radius: 10px; max-width: 85%; white-space: pre-wrap; }
     .yo { align-self: flex-end; background: #e8f0fe; border: 1px solid #1a73e8; }
     .bot { align-self: flex-start; background: #f3f3f0; border: 1px solid #ccc; }
+    .panel { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: .6rem; list-style: none; padding: 0; }
+    .panel li { border: 2px solid #ccc; border-radius: 8px; padding: .5rem .6rem; font-size: .9rem; display: flex; flex-direction: column; gap: .25rem; }
+    .panel li.ocupada { border-color: #1a73e8; background: #e8f0fe; }
+    .panel li.llega { border-color: #b26a00; background: #fff4e0; }
+    .panel li.limpieza { border-color: #777; background: #f0f0f0; border-style: dashed; }
+    .panel li.libre { border-color: #2e7d32; }
+    .resumen { display: flex; flex-wrap: wrap; gap: .5rem 1.2rem; margin: .5rem 0 1rem; }
+    .resumen strong { font-size: 1.3rem; }
+    form.en-linea { display: inline; margin: 0; }
+    button.chico { padding: .15rem .5rem; font-size: .85rem; }
     button { border: 2px solid #1a73e8; background: #e8f0fe; border-radius: 6px; cursor: pointer; font-weight: 600; }
   </style>
 </head>
 <body>
   <h1>Inu no Hoteru 犬のホテル</h1>
-  <nav><a href="{% url 'inicio' %}">Habitaciones</a><a href="{% url 'disponibilidad' %}">Disponibilidad</a><a href="{% url 'reservaciones' %}">Reservaciones</a><a href="{% url 'chat' %}">Chat</a><a href="{% url 'solicitudes' %}">Solicitudes</a></nav>
+  <nav><a href="{% url 'inicio' %}">Habitaciones</a><a href="{% url 'disponibilidad' %}">Disponibilidad</a><a href="{% url 'panel' %}">Panel</a><a href="{% url 'reservaciones' %}">Reservaciones</a><a href="{% url 'chat' %}">Chat</a><a href="{% url 'solicitudes' %}">Solicitudes</a></nav>
   <p class="nota">Prototipo conceptual con datos de ejemplo.</p>
   {% block contenido %}{% endblock %}
 </body>

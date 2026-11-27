@@ -99,6 +99,7 @@ def reserva_confirmada(request, reserva_id):
 
 
 def reservaciones(request):
+    hoy = timezone.localdate()
     filas = [
         (r, (r.salida - r.entrada).days, r.habitacion.tarifa_noche * (r.salida - r.entrada).days)
         for r in Reserva.objects.select_related("habitacion")
@@ -123,3 +124,89 @@ def chat_mensaje(request):
 
 def solicitudes(request):
     return render(request, "hotel/solicitudes.html", {"solicitudes": SolicitudContacto.objects.all()})
+
+
+def _estado_habitaciones(hoy):
+    """Estado de cada habitación hoy: en hotel, pendiente de check-in, limpieza o libre."""
+    activas = {r.habitacion_id: r for r in Reserva.objects.filter(estado=Reserva.ACTIVA)}
+    pendientes = {}
+    for r in Reserva.objects.filter(estado=Reserva.CONFIRMADA, entrada__lte=hoy, salida__gt=hoy):
+        pendientes.setdefault(r.habitacion_id, r)
+    filas = []
+    for h in Habitacion.objects.all():
+        if h.pk in activas:
+            r = activas[h.pk]
+            etiqueta = "Sale hoy" if r.salida <= hoy else "Ocupada"
+            filas.append({"hab": h, "clave": "ocupada", "etiqueta": etiqueta, "reserva": r, "sale_hoy": r.salida <= hoy})
+        elif h.pk in pendientes:
+            r = pendientes[h.pk]
+            etiqueta = "Llega hoy" if r.entrada == hoy else "Pendiente de check-in"
+            filas.append({"hab": h, "clave": "llega", "etiqueta": etiqueta, "reserva": r})
+        elif h.en_limpieza:
+            filas.append({"hab": h, "clave": "limpieza", "etiqueta": "En limpieza"})
+        else:
+            filas.append({"hab": h, "clave": "libre", "etiqueta": "Libre"})
+    return filas
+
+
+def panel(request):
+    hoy = timezone.localdate()
+    filas = _estado_habitaciones(hoy)
+    cuenta = {k: sum(1 for f in filas if f["clave"] == k) for k in ("ocupada", "llega", "limpieza", "libre")}
+    cuenta["sale_hoy"] = sum(1 for f in filas if f.get("sale_hoy"))
+    return render(request, "hotel/panel.html", {"filas": filas, "cuenta": cuenta, "hoy": hoy})
+
+
+def checkin(request, reserva_id):
+    hoy = timezone.localdate()
+    with transaction.atomic():
+        reserva = get_object_or_404(Reserva.objects.select_related("habitacion").select_for_update(), pk=reserva_id)
+        contexto = {"reserva": reserva}
+        error = None
+        if reserva.estado != Reserva.CONFIRMADA:
+            error = "Esta reserva ya no está pendiente de check-in."
+        elif reserva.entrada > hoy:
+            error = f"La entrada es el {reserva.entrada:%d/%m/%Y}; todavía no se puede hacer el check-in."
+        elif reserva.salida <= hoy:
+            error = "La fecha de salida de esta reserva ya pasó."
+        elif reserva.habitacion.en_limpieza:
+            error = "La habitación está en limpieza. Márquela como disponible en el panel."
+        elif Reserva.objects.filter(habitacion=reserva.habitacion, estado=Reserva.ACTIVA).exists():
+            error = "La habitación todavía tiene otro perro en el hotel."
+        if error:
+            contexto["error"] = error
+            contexto["bloqueado"] = True
+            return render(request, "hotel/checkin.html", contexto, status=409)
+        if request.method == "POST":
+            perro = request.POST.get("perro", "").strip()
+            if not perro:
+                contexto["error"] = "Escriba el nombre del perro."
+                return render(request, "hotel/checkin.html", contexto, status=400)
+            reserva.estado = Reserva.ACTIVA
+            reserva.perro = perro[:80]
+            reserva.checkin_en = timezone.now()
+            reserva.save()
+            return redirect("panel")
+    return render(request, "hotel/checkin.html", contexto)
+
+
+@require_POST
+def checkout(request, reserva_id):
+    hoy = timezone.localdate()
+    with transaction.atomic():
+        reserva = get_object_or_404(Reserva.objects.select_related("habitacion").select_for_update(), pk=reserva_id)
+        if reserva.estado == Reserva.ACTIVA:
+            reserva.estado = Reserva.CERRADA
+            reserva.checkout_en = timezone.now()
+            if reserva.salida > hoy:  # salida anticipada: libera las fechas restantes
+                reserva.salida = hoy
+            reserva.save()
+            reserva.habitacion.en_limpieza = True
+            reserva.habitacion.save(update_fields=["en_limpieza"])
+    return redirect("panel")
+
+
+@require_POST
+def limpieza_lista(request, habitacion_id):
+    Habitacion.objects.filter(pk=habitacion_id).update(en_limpieza=False)
+    return redirect("panel")

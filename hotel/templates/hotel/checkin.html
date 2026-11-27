@@ -1,0 +1,15 @@
+{% extends "hotel/base.html" %}
+{% block contenido %}
+  <h2>Check-in</h2>
+  <p><strong>{{ reserva.habitacion }}</strong> · {{ reserva.nombre }} ({{ reserva.telefono }})<br>
+    {{ reserva.entrada|date:"d/m/Y" }} a {{ reserva.salida|date:"d/m/Y" }}</p>
+  {% if error %}<p class="error">{{ error }}</p>{% endif %}
+  {% if not bloqueado %}
+  <form class="filtros" method="post">
+    {% csrf_token %}
+    <label>Nombre del perro <input name="perro" maxlength="80" required></label>
+    <button type="submit">Confirmar check-in</button>
+  </form>
+  {% endif %}
+  <p><a href="{% url 'panel' %}">Volver al panel</a></p>
+{% endblock %}

@@ -182,3 +182,57 @@ class RecorridoCompletoTests(TestCase):
         self.assertEqual(Reserva.objects.count(), 0)
         self.assertEqual(SolicitudContacto.objects.count(), 0)
         self.assertEqual(Habitacion.objects.count(), 30)
+
+
+class OcupacionTests(TestCase):
+    def setUp(self):
+        self.hoy = timezone.localdate()
+        self.h = Habitacion.objects.get(numero=3)
+
+    def _reserva(self, entrada, salida, hab=None):
+        return Reserva.objects.create(habitacion=hab or self.h, nombre="Ana", telefono="1", entrada=entrada, salida=salida)
+
+    def test_panel_cuenta_estados(self):
+        self._reserva(self.hoy, self.hoy + timedelta(days=2))
+        r = self.client.get("/panel/")
+        self.assertContains(r, "Llega hoy")
+        self.assertContains(r, "<strong>29</strong> libres")
+
+    def test_checkin_checkout_y_limpieza(self):
+        res = self._reserva(self.hoy, self.hoy + timedelta(days=3))
+        # sin nombre de perro no avanza
+        self.assertEqual(self.client.post(f"/checkin/{res.pk}/", {"perro": ""}).status_code, 400)
+        self.assertEqual(self.client.post(f"/checkin/{res.pk}/", {"perro": "Rocky"}).status_code, 302)
+        res.refresh_from_db()
+        self.assertEqual((res.estado, res.perro), ("activa", "Rocky"))
+        self.assertContains(self.client.get("/panel/"), "perro Rocky")
+
+        # check-out anticipado: cierra, libera fechas y deja la habitación en limpieza
+        self.client.post(f"/checkout/{res.pk}/")
+        res.refresh_from_db(); self.h.refresh_from_db()
+        self.assertEqual(res.estado, "cerrada")
+        self.assertEqual(res.salida, self.hoy)
+        self.assertTrue(self.h.en_limpieza)
+        self.assertContains(self.client.get("/panel/"), "En limpieza")
+        # las fechas restantes quedan libres para otra reserva
+        d = self.hoy + timedelta(days=1)
+        self.assertIn(self.h, habitaciones_libres(d, d + timedelta(days=1)))
+
+        # en limpieza no admite otro check-in hasta marcarla disponible
+        nueva = self._reserva(self.hoy, self.hoy + timedelta(days=2))
+        self.assertEqual(self.client.post(f"/checkin/{nueva.pk}/", {"perro": "Luna"}).status_code, 409)
+        self.client.post(f"/limpieza/{self.h.pk}/")
+        self.assertEqual(self.client.post(f"/checkin/{nueva.pk}/", {"perro": "Luna"}).status_code, 302)
+
+    def test_no_checkin_antes_de_la_entrada_ni_doble(self):
+        futura = self._reserva(self.hoy + timedelta(days=2), self.hoy + timedelta(days=4))
+        self.assertEqual(self.client.post(f"/checkin/{futura.pk}/", {"perro": "X"}).status_code, 409)
+        res = self._reserva(self.hoy, self.hoy + timedelta(days=1), Habitacion.objects.get(numero=4))
+        self.client.post(f"/checkin/{res.pk}/", {"perro": "Rocky"})
+        self.assertEqual(self.client.post(f"/checkin/{res.pk}/", {"perro": "Otro"}).status_code, 409)
+
+    def test_sale_hoy_y_checkout_es_post(self):
+        res = self._reserva(self.hoy - timedelta(days=2), self.hoy)
+        Reserva.objects.filter(pk=res.pk).update(estado="activa", perro="Max")
+        self.assertContains(self.client.get("/panel/"), "Sale hoy")
+        self.assertEqual(self.client.get(f"/checkout/{res.pk}/").status_code, 405)

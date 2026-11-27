@@ -10,5 +10,9 @@ urlpatterns = [
     path("chat/", views.chat, name="chat"),
     path("chat/mensaje/", views.chat_mensaje, name="chat_mensaje"),
     path("solicitudes/", views.solicitudes, name="solicitudes"),
+    path("panel/", views.panel, name="panel"),
+    path("checkin/<int:reserva_id>/", views.checkin, name="checkin"),
+    path("checkout/<int:reserva_id>/", views.checkout, name="checkout"),
+    path("limpieza/<int:habitacion_id>/", views.limpieza_lista, name="limpieza_lista"),
     path("reservaciones/", views.reservaciones, name="reservaciones"),
 ]
