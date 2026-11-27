@@ -51,7 +51,7 @@ class DisponibilidadTests(TestCase):
         self.assertContains(r, "posterior")
         r = self.client.get("/disponibilidad/", {"entrada": d.isoformat(), "salida": (d + timedelta(days=2)).isoformat()})
         self.assertContains(r, "Habitaciones libres (30)")
-        self.assertContains(r, "Habitación 01 · Mediana (2 m²) · $60")
+        self.assertContains(r, "Habitación 01 · Pequeña (1 m²) · $60")
 
 
 class ReservaTests(TestCase):
@@ -1220,7 +1220,8 @@ class LogosTests(TestCase):
 class TamanoHabitacionTests(TestCase):
     def test_tamano_por_defecto_edicion_y_alta(self):
         from .models import Habitacion
-        self.assertEqual(Habitacion.objects.get(numero=1).tamano, "mediana")
+        self.assertEqual([Habitacion.objects.get(numero=n).tamano for n in (1, 10, 11, 20, 21, 30)],
+                         ["pequena", "pequena", "mediana", "mediana", "grande", "grande"])
         entrar(self.client, "Administrador")
         h = Habitacion.objects.get(numero=1)
         r = self.client.post(f"/habitaciones/{h.pk}/", {"accion": "guardar", "tarifa": "30", "tamano": "grande", "activa": "1"})
@@ -1236,11 +1237,11 @@ class TamanoHabitacionTests(TestCase):
     def test_se_muestra_en_disponibilidad_y_panel_y_chat(self):
         from . import chat
         from .models import Habitacion
-        Habitacion.objects.filter(numero=1).update(tamano="grande")
+        Habitacion.objects.filter(numero=1).update(tamano="grande")  # 1 era pequeña
         e = timezone.localdate() + timedelta(days=3)
         s = e + timedelta(days=2)
         self.assertContains(self.client.get("/disponibilidad/", {"entrada": e.isoformat(), "salida": s.isoformat()}), "Grande")
         r = chat.consultar_disponibilidad(e.isoformat(), s.isoformat())
-        self.assertEqual(r["libres_por_tamano"], {"Grande (4 m²)": 1, "Mediana (2 m²)": 29})
+        self.assertEqual(r["libres_por_tamano"], {"Pequeña (1 m²)": 9, "Mediana (2 m²)": 10, "Grande (4 m²)": 11})
         entrar(self.client, "Administrador")
         self.assertContains(self.client.get("/panel/"), "Grande")

@@ -26,7 +26,7 @@ Resultado de las pruebas del recorrido completo. Lo que el prototipo hace a prop
 ## Decisiones del prototipo (no son errores)
 - Sin registro de clientes ni de perros; la reserva pide nombre y teléfono y el nombre del perro se anota en el check-in.
 - Sin validación de vacunas ni fotos de recepción.
-- Tamaños de habitación: pequeña 1 m², mediana 2 m², grande 4 m²; son informativos, no cambian la tarifa. Todas empiezan en $30 por noche y como medianas hasta que se asignen; la tarifa es un valor de ejemplo en la base.
+- Tamaños de habitación: pequeña 1 m², mediana 2 m², grande 4 m²; son informativos, no cambian la tarifa. Habitaciones 1 a 10 pequeñas, 11 a 20 medianas y 21 a 30 grandes; todas en $30 por noche; la tarifa es un valor de ejemplo en la base.
 - La reserva se da por pagada: no hay anticipo, cobro ni facturación.
 - El chat no crea reservas; necesita `ANTHROPIC_API_KEY` y, sin ella, avisa que no está disponible.
 
