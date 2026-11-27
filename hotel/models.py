@@ -35,10 +35,39 @@ class BloqueoHabitacion(models.Model):
 
 
 class Cliente(models.Model):
+    """Maestro de clientes según el CU-02 del documento del caso de uso."""
+
+    TIPOS_ID = [("fisica", "Cédula física"), ("juridica", "Cédula jurídica"), ("dimex", "DIMEX"), ("pasaporte", "Pasaporte")]
+    ESTADOS = [("activo", "Activo"), ("inactivo", "Inactivo"), ("bloqueado", "Bloqueado")]
+    CANALES = [("whatsapp", "WhatsApp"), ("correo", "Correo electrónico"), ("ambos", "Ambos")]
+
     nombre = models.CharField(max_length=120)
-    telefono = models.CharField(max_length=30, unique=True)
+    tipo_identificacion = models.CharField(max_length=10, choices=TIPOS_ID, blank=True)
+    identificacion = models.CharField(max_length=30, blank=True)
     correo = models.EmailField(blank=True)
-    creado = models.DateTimeField(auto_now_add=True)
+    telefono = models.CharField(max_length=30, unique=True)
+    whatsapp = models.CharField("WhatsApp", max_length=30, blank=True)
+    canal_preferido = models.CharField(max_length=10, choices=CANALES, default="ambos")
+    direccion = models.CharField(max_length=250, blank=True)
+    emergencia_nombre = models.CharField(max_length=120, blank=True)
+    emergencia_parentesco = models.CharField(max_length=60, blank=True)
+    emergencia_telefono = models.CharField(max_length=30, blank=True)
+    retira_nombre = models.CharField("Persona autorizada para retirar", max_length=120, blank=True)
+    retira_cedula = models.CharField(max_length=30, blank=True)
+    retira_telefono = models.CharField(max_length=30, blank=True)
+    vet_autoriza = models.BooleanField("Autoriza atención veterinaria de emergencia", default=False)
+    vet_monto_max = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    acepta_terminos_en = models.DateField(null=True, blank=True)
+    acepta_fotos_en = models.DateField(null=True, blank=True)
+    acepta_datos_en = models.DateField(null=True, blank=True)  # tratamiento de datos, Ley 8968
+    fact_razon_social = models.CharField(max_length=150, blank=True)
+    fact_cedula_juridica = models.CharField(max_length=30, blank=True)
+    estado = models.CharField(max_length=10, choices=ESTADOS, default="activo")
+    notas_internas = models.TextField(blank=True)
+    como_nos_conocio = models.CharField(max_length=100, blank=True)
+    bano_estadias_largas = models.BooleanField("Autoriza baño en estadías de más de 7 días", default=False)
+    descuento_pct = models.DecimalField("Descuento (%)", max_digits=5, decimal_places=2, default=0)  # solo lo aprueba el administrador
+    creado = models.DateTimeField(auto_now_add=True)  # fecha de registro
 
     class Meta:
         ordering = ["nombre"]

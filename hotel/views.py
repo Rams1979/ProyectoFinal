@@ -8,6 +8,7 @@ from django.contrib.auth.models import Group, User
 from django.contrib.auth.password_validation import validate_password
 from django.conf import settings
 from django.core.exceptions import PermissionDenied, ValidationError
+from django.core.validators import validate_email
 from django.db import transaction
 from django.db.models import Q, Sum
 from django.http import HttpResponse, JsonResponse
@@ -312,20 +313,84 @@ def clientes(request):
     return render(request, "hotel/clientes.html", {"clientes": lista, "q": q})
 
 
+CAMPOS_TEXTO = {  # campo del modelo: largo máximo
+    "nombre": 120, "identificacion": 30, "correo": 254, "telefono": 30, "whatsapp": 30, "direccion": 250,
+    "emergencia_nombre": 120, "emergencia_parentesco": 60, "emergencia_telefono": 30,
+    "retira_nombre": 120, "retira_cedula": 30, "retira_telefono": 30,
+    "fact_razon_social": 150, "fact_cedula_juridica": 30, "notas_internas": 1000, "como_nos_conocio": 100,
+}
+CAMPOS_FECHA = ["acepta_terminos_en", "acepta_fotos_en", "acepta_datos_en"]
+
+
+def _leer_cliente(datos, actual=None):
+    """Valida el formulario del maestro de clientes. Devuelve (valores, error). El descuento solo lo cambia el administrador."""
+    v = {k: datos.get(k, "").strip()[:n] for k, n in CAMPOS_TEXTO.items()}
+    if not v["nombre"] or not v["telefono"]:
+        return v, "Nombre y teléfono son obligatorios."
+    if v["correo"]:
+        try:
+            validate_email(v["correo"])
+        except ValidationError:
+            return v, "El correo no es válido."
+    for campo, opciones in (("tipo_identificacion", Cliente.TIPOS_ID), ("estado", Cliente.ESTADOS), ("canal_preferido", Cliente.CANALES)):
+        v[campo] = datos.get(campo, getattr(actual or Cliente(), campo))  # si no viene, se conserva o toma el valor por defecto
+        if v[campo] not in dict(opciones) and not (campo == "tipo_identificacion" and v[campo] == ""):
+            return v, "Elija una opción válida en los campos de lista."
+    for campo in CAMPOS_FECHA:
+        v[campo] = _fecha(datos.get(campo, ""))
+        if datos.get(campo, "").strip() and not v[campo]:
+            return v, "Hay una fecha de aceptación inválida."
+    v["vet_autoriza"] = datos.get("vet_autoriza") == "1"
+    v["bano_estadias_largas"] = datos.get("bano_estadias_largas") == "1"
+    monto, ok = _decimal(datos.get("vet_monto_max"), permitir_vacio=True)
+    if not ok:
+        return v, "El monto máximo de emergencia veterinaria no es válido."
+    v["vet_monto_max"] = monto
+    if actual is not None:  # el descuento solo cambia si lo envía el administrador
+        v["descuento_pct"] = actual.descuento_pct
+    return v, None
+
+
+def _guardar_descuento(request, v):
+    """Aplica el descuento enviado solo si quien guarda es administrador. Devuelve un error o None."""
+    if not es_administrador(request.user) or "descuento_pct" not in request.POST:
+        return None
+    d, ok = _decimal(request.POST.get("descuento_pct"), permitir_vacio=True)
+    if not ok or (d or 0) > 100:
+        return "El descuento debe estar entre 0 y 100."
+    v["descuento_pct"] = d or Decimal("0")
+    return None
+
+
+def _form_cliente(request, c=None):
+    error, datos = None, request.POST if request.method == "POST" else {}
+    if request.method == "POST":
+        v, error = _leer_cliente(request.POST, actual=c)
+        if not error:
+            error = _guardar_descuento(request, v)
+        if not error and Cliente.objects.filter(telefono=v["telefono"]).exclude(pk=c.pk if c else None).exists():
+            error = "Ya existe un cliente con ese teléfono."
+        if not error:
+            if c is None:
+                c = Cliente(**{k: x for k, x in v.items() if k != "descuento_pct" or es_administrador(request.user)})
+            else:
+                for k, x in v.items():
+                    setattr(c, k, x)
+            c.save()
+            return redirect("cliente", cliente_id=c.pk)
+    contexto = {"error": error, "datos": datos, "c": c, "f": c or Cliente(), "tipos_id": Cliente.TIPOS_ID, "estados": Cliente.ESTADOS,
+                "canales": Cliente.CANALES, "es_admin": es_administrador(request.user)}
+    return render(request, "hotel/cliente_form.html", contexto, status=400 if error else 200)
+
+
 @con_area("clientes")
 def cliente_nuevo(request):
-    error, datos = None, request.POST
-    if request.method == "POST":
-        nombre, telefono = datos.get("nombre", "").strip(), datos.get("telefono", "").strip()
-        if not nombre or not telefono:
-            error = "Nombre y teléfono son obligatorios."
-        elif Cliente.objects.filter(telefono=telefono).exists():
-            error = "Ya existe un cliente con ese teléfono."
-        else:
-            c = Cliente.objects.create(nombre=nombre, telefono=telefono, correo=datos.get("correo", "").strip())
-            return redirect("cliente", cliente_id=c.pk)
-    return render(request, "hotel/cliente_nuevo.html", {"error": error, "datos": datos if request.method == "POST" else {}},
-                  status=400 if error else 200)
+    return _form_cliente(request)
+
+
+@con_area("clientes")
+def cliente_editar(request, cliente_id):
+    return _form_cliente(request, get_object_or_404(Cliente, pk=cliente_id))
 
 
 @con_area("clientes")

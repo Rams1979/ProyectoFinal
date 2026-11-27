@@ -1,7 +1,23 @@
 {% extends "hotel/base.html" %}
 {% block contenido %}
   <h2>{{ c.nombre }}</h2>
-  <p>{{ c.telefono }}{% if c.correo %} · {{ c.correo }}{% endif %}</p>
+  {% if c.estado == "bloqueado" %}<p class="aviso"><strong>Cliente bloqueado.</strong> {{ c.notas_internas }}</p>{% endif %}
+  <p>{{ c.telefono }}{% if c.correo %} · {{ c.correo }}{% endif %} · <a href="{% url 'cliente_editar' c.pk %}">Editar datos</a></p>
+  <table>
+    {% if c.identificacion %}<tr><th>Identificación</th><td>{{ c.get_tipo_identificacion_display }} {{ c.identificacion }}</td></tr>{% endif %}
+    {% if c.whatsapp %}<tr><th>WhatsApp</th><td>{{ c.whatsapp }}</td></tr>{% endif %}
+    <tr><th>Canal preferido</th><td>{{ c.get_canal_preferido_display }}</td></tr>
+    {% if c.direccion %}<tr><th>Dirección</th><td>{{ c.direccion }}</td></tr>{% endif %}
+    {% if c.emergencia_nombre %}<tr><th>Contacto de emergencia</th><td>{{ c.emergencia_nombre }}{% if c.emergencia_parentesco %} ({{ c.emergencia_parentesco }}){% endif %} · {{ c.emergencia_telefono }}</td></tr>{% endif %}
+    {% if c.retira_nombre %}<tr><th>Autorizado para retirar</th><td>{{ c.retira_nombre }} · cédula {{ c.retira_cedula }} · {{ c.retira_telefono }}</td></tr>{% endif %}
+    <tr><th>Emergencia veterinaria</th><td>{% if c.vet_autoriza %}Autorizada{% if c.vet_monto_max %} hasta ${{ c.vet_monto_max }}{% endif %}{% else %}No autorizada{% endif %}</td></tr>
+    <tr><th>Baño en estadías largas</th><td>{% if c.bano_estadias_largas %}Autorizado{% else %}No autorizado{% endif %}</td></tr>
+    <tr><th>Consentimientos</th><td>Términos: {{ c.acepta_terminos_en|date:"d/m/Y"|default:"pendiente" }} · Fotos: {{ c.acepta_fotos_en|date:"d/m/Y"|default:"pendiente" }} · Datos (Ley 8968): {{ c.acepta_datos_en|date:"d/m/Y"|default:"pendiente" }}</td></tr>
+    {% if c.fact_razon_social %}<tr><th>Facturación</th><td>{{ c.fact_razon_social }} · {{ c.fact_cedula_juridica }}</td></tr>{% endif %}
+    <tr><th>Estado</th><td>{{ c.get_estado_display }}{% if c.descuento_pct %} · Descuento {{ c.descuento_pct }} %{% endif %}</td></tr>
+    <tr><th>Registro</th><td>{{ c.creado|date:"d/m/Y" }}{% if c.como_nos_conocio %} · {{ c.como_nos_conocio }}{% endif %}</td></tr>
+    {% if c.notas_internas and c.estado != "bloqueado" %}<tr><th>Notas internas</th><td>{{ c.notas_internas }}</td></tr>{% endif %}
+  </table>
   {% if error %}<p class="error">{{ error }}</p>{% endif %}
 
   {% for item in perros %}

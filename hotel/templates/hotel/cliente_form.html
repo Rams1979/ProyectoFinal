@@ -1,0 +1,58 @@
+{% extends "hotel/base.html" %}
+{% block contenido %}
+  <h2>{% if c %}Editar cliente{% else %}Nuevo cliente{% endif %}</h2>
+  {% if error %}<p class="error">{{ error }}</p>{% endif %}
+  <form method="post">
+    {% csrf_token %}
+    {% with d=datos %}
+    <h3>Datos generales</h3>
+    <div class="filtros">
+      <label>Nombre completo * <input name="nombre" value="{{ d.nombre|default:f.nombre }}" required></label>
+      <label>Tipo de identificación <select name="tipo_identificacion"><option value="">—</option>{% for k, e in tipos_id %}<option value="{{ k }}"{% if k == d.tipo_identificacion|default:f.tipo_identificacion %} selected{% endif %}>{{ e }}</option>{% endfor %}</select></label>
+      <label>Número de identificación <input name="identificacion" value="{{ d.identificacion|default:f.identificacion }}"></label>
+      <label>Teléfono * <input name="telefono" value="{{ d.telefono|default:f.telefono }}" required></label>
+      <label>WhatsApp <input name="whatsapp" value="{{ d.whatsapp|default:f.whatsapp }}"></label>
+      <label>Correo <input type="email" name="correo" value="{{ d.correo|default:f.correo }}"></label>
+      <label>Canal preferido para avisos <select name="canal_preferido">{% for k, e in canales %}<option value="{{ k }}"{% if k == d.canal_preferido|default:f.canal_preferido %} selected{% endif %}>{{ e }}</option>{% endfor %}</select></label>
+      <label>Dirección <input name="direccion" maxlength="250" value="{{ d.direccion|default:f.direccion }}"></label>
+    </div>
+    <h3>Contactos</h3>
+    <div class="filtros">
+      <label>Contacto de emergencia (nombre) <input name="emergencia_nombre" value="{{ d.emergencia_nombre|default:f.emergencia_nombre }}"></label>
+      <label>Parentesco <input name="emergencia_parentesco" value="{{ d.emergencia_parentesco|default:f.emergencia_parentesco }}"></label>
+      <label>Teléfono de emergencia <input name="emergencia_telefono" value="{{ d.emergencia_telefono|default:f.emergencia_telefono }}"></label>
+    </div>
+    <div class="filtros">
+      <label>Persona autorizada para retirar al perro <input name="retira_nombre" value="{{ d.retira_nombre|default:f.retira_nombre }}"></label>
+      <label>Cédula <input name="retira_cedula" value="{{ d.retira_cedula|default:f.retira_cedula }}"></label>
+      <label>Teléfono <input name="retira_telefono" value="{{ d.retira_telefono|default:f.retira_telefono }}"></label>
+    </div>
+    <h3>Autorizaciones y consentimientos</h3>
+    <div class="filtros">
+      <label><input type="checkbox" name="vet_autoriza" value="1"{% if d %}{% if d.vet_autoriza %} checked{% endif %}{% elif f.vet_autoriza %} checked{% endif %}> Autoriza atención veterinaria de emergencia</label>
+      <label>Monto máximo autorizado (USD) <input name="vet_monto_max" inputmode="decimal" value="{{ d.vet_monto_max|default:f.vet_monto_max|default_if_none:'' }}"></label>
+      <label><input type="checkbox" name="bano_estadias_largas" value="1"{% if d %}{% if d.bano_estadias_largas %} checked{% endif %}{% elif f.bano_estadias_largas %} checked{% endif %}> Autoriza baño en estadías de más de 7 días</label>
+    </div>
+    <div class="filtros">
+      <label>Aceptó términos el <input type="date" name="acepta_terminos_en" value="{{ d.acepta_terminos_en|default:f.acepta_terminos_en|date:'Y-m-d' }}"></label>
+      <label>Aceptó el uso de fotos el <input type="date" name="acepta_fotos_en" value="{{ d.acepta_fotos_en|default:f.acepta_fotos_en|date:'Y-m-d' }}"></label>
+      <label>Aceptó el tratamiento de datos (Ley 8968) el <input type="date" name="acepta_datos_en" value="{{ d.acepta_datos_en|default:f.acepta_datos_en|date:'Y-m-d' }}"></label>
+    </div>
+    <h3>Facturación (solo si difiere del cliente)</h3>
+    <div class="filtros">
+      <label>Razón social <input name="fact_razon_social" value="{{ d.fact_razon_social|default:f.fact_razon_social }}"></label>
+      <label>Cédula jurídica <input name="fact_cedula_juridica" value="{{ d.fact_cedula_juridica|default:f.fact_cedula_juridica }}"></label>
+    </div>
+    <h3>Gestión interna</h3>
+    <div class="filtros">
+      <label>Estado <select name="estado">{% for k, e in estados %}<option value="{{ k }}"{% if k == d.estado|default:f.estado %} selected{% endif %}>{{ e }}</option>{% endfor %}</select></label>
+      <label>Cómo nos conoció <input name="como_nos_conocio" value="{{ d.como_nos_conocio|default:f.como_nos_conocio }}"></label>
+      <label>Descuento del cliente frecuente (%) <input name="descuento_pct" inputmode="decimal" value="{{ d.descuento_pct|default:f.descuento_pct|default:0 }}"{% if not es_admin %} disabled{% endif %}></label>
+    </div>
+    {% if not es_admin %}<p class="nota">El descuento solo lo aprueba el administrador.</p>{% endif %}
+    <label>Notas internas <textarea name="notas_internas" rows="3" maxlength="1000">{{ d.notas_internas|default:f.notas_internas }}</textarea></label>
+    {% endwith %}
+    <p><button type="submit">Guardar</button></p>
+  </form>
+  <p><a href="{% if c %}{% url 'cliente' c.pk %}{% else %}{% url 'clientes' %}{% endif %}">Volver</a></p>
+{% endblock %}

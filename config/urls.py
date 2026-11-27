@@ -30,6 +30,7 @@ urlpatterns = [
     path("clientes/", views.clientes, name="clientes"),
     path("clientes/nuevo/", views.cliente_nuevo, name="cliente_nuevo"),
     path("clientes/<int:cliente_id>/", views.cliente, name="cliente"),
+    path("clientes/<int:cliente_id>/editar/", views.cliente_editar, name="cliente_editar"),
     path("reserva/<int:reserva_id>/cancelar/", views.cancelar, name="cancelar"),
     path("reserva/<int:reserva_id>/editar/", views.editar_reserva, name="editar_reserva"),
     path("cuidado/", views.cuidado, name="cuidado"),

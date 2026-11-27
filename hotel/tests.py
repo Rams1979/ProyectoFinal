@@ -4,7 +4,9 @@ from django.test import TestCase
 from django.utils import timezone
 
 from .disponibilidad import habitaciones_libres
-from .models import Habitacion, Reserva
+from decimal import Decimal
+
+from .models import Cliente, Habitacion, Reserva
 from .permisos import rol
 
 
@@ -1245,3 +1247,72 @@ class TamanoHabitacionTests(TestCase):
         self.assertEqual(r["libres_por_tamano"], {"Pequeña (1 m²)": 9, "Mediana (2 m²)": 10, "Grande (4 m²)": 11})
         entrar(self.client, "Administrador")
         self.assertContains(self.client.get("/panel/"), "Grande")
+
+
+class MaestroClientesTests(TestCase):
+    COMPLETO = {
+        "nombre": "Marta Rojas", "tipo_identificacion": "fisica", "identificacion": "1-2345-6789", "telefono": "8888-0001",
+        "whatsapp": "8888-0002", "correo": "marta@ejemplo.test", "canal_preferido": "whatsapp", "direccion": "Cartago, centro",
+        "emergencia_nombre": "Pedro Rojas", "emergencia_parentesco": "Hermano", "emergencia_telefono": "8888-0003",
+        "retira_nombre": "Ana Mora", "retira_cedula": "3-1111-2222", "retira_telefono": "8888-0004",
+        "vet_autoriza": "1", "vet_monto_max": "150,50", "bano_estadias_largas": "1",
+        "acepta_terminos_en": "2026-11-01", "acepta_fotos_en": "2026-11-01", "acepta_datos_en": "2026-11-01",
+        "fact_razon_social": "Rojas SA", "fact_cedula_juridica": "3-101-123456", "estado": "activo",
+        "como_nos_conocio": "Instagram", "notas_internas": "Prefiere llamada", "descuento_pct": "10",
+    }
+
+    def test_alta_completa_por_administrador(self):
+        entrar(self.client, "Administrador")
+        r = self.client.post("/clientes/nuevo/", self.COMPLETO)
+        self.assertEqual(r.status_code, 302)
+        c = Cliente.objects.get(telefono="8888-0001")
+        self.assertEqual((c.tipo_identificacion, c.identificacion, c.whatsapp, c.canal_preferido), ("fisica", "1-2345-6789", "8888-0002", "whatsapp"))
+        self.assertEqual((c.emergencia_nombre, c.emergencia_parentesco, c.retira_cedula), ("Pedro Rojas", "Hermano", "3-1111-2222"))
+        self.assertTrue(c.vet_autoriza and c.bano_estadias_largas)
+        self.assertEqual((c.vet_monto_max, c.descuento_pct), (Decimal("150.50"), Decimal("10")))
+        self.assertEqual(c.acepta_datos_en, date(2026, 11, 1))
+        self.assertEqual((c.fact_razon_social, c.como_nos_conocio), ("Rojas SA", "Instagram"))
+        pagina = self.client.get(f"/clientes/{c.pk}/")
+        for texto in ("Cédula física", "Pedro Rojas", "hasta $150,50", "Ley 8968", "Rojas SA", "Descuento 10"):
+            self.assertContains(pagina, texto)
+
+    def test_descuento_solo_lo_cambia_el_administrador(self):
+        entrar(self.client, "Recepción", "rita")
+        self.client.post("/clientes/nuevo/", self.COMPLETO)
+        c = Cliente.objects.get(telefono="8888-0001")
+        self.assertEqual(c.descuento_pct, 0)  # la recepcionista no lo fija
+        self.client.post(f"/clientes/{c.pk}/editar/", {**self.COMPLETO, "descuento_pct": "50", "nombre": "Marta R."})
+        c.refresh_from_db()
+        self.assertEqual((c.nombre, c.descuento_pct), ("Marta R.", 0))
+        self.assertContains(self.client.get(f"/clientes/{c.pk}/editar/"), "solo lo aprueba el administrador")
+        self.client.post("/salir/")
+        entrar(self.client, "Administrador", "jefe")
+        self.client.post(f"/clientes/{c.pk}/editar/", {**self.COMPLETO, "descuento_pct": "15"})
+        c.refresh_from_db()
+        self.assertEqual(c.descuento_pct, Decimal("15"))
+        self.assertEqual(self.client.post(f"/clientes/{c.pk}/editar/", {**self.COMPLETO, "descuento_pct": "150"}).status_code, 400)
+
+    def test_validaciones(self):
+        entrar(self.client, "Administrador")
+        for cambio in ({"nombre": ""}, {"correo": "no-es-correo"}, {"estado": "vip"}, {"tipo_identificacion": "x"},
+                       {"canal_preferido": "paloma"}, {"acepta_fotos_en": "31/02/2026"}, {"vet_monto_max": "abc"}):
+            self.assertEqual(self.client.post("/clientes/nuevo/", {**self.COMPLETO, **cambio}).status_code, 400, cambio)
+        self.client.post("/clientes/nuevo/", self.COMPLETO)
+        self.assertEqual(self.client.post("/clientes/nuevo/", {**self.COMPLETO, "nombre": "Otra"}).status_code, 400)  # teléfono repetido
+        otro = Cliente.objects.create(nombre="Otro", telefono="9999")
+        self.assertEqual(self.client.post(f"/clientes/{otro.pk}/editar/", {**self.COMPLETO}).status_code, 400)  # choca con otro
+
+    def test_alta_minima_y_bloqueado(self):
+        entrar(self.client, "Recepción", "rita")
+        self.assertEqual(self.client.post("/clientes/nuevo/", {"nombre": "Luis", "telefono": "7777"}).status_code, 302)
+        c = Cliente.objects.get(telefono="7777")
+        self.assertEqual((c.estado, c.canal_preferido, c.descuento_pct), ("activo", "ambos", 0))
+        self.client.post(f"/clientes/{c.pk}/editar/", {"nombre": "Luis", "telefono": "7777", "estado": "bloqueado",
+                                                        "canal_preferido": "ambos", "notas_internas": "No pagó"})
+        self.assertContains(self.client.get(f"/clientes/{c.pk}/"), "Cliente bloqueado")
+
+    def test_formulario_se_ve_y_edicion_requiere_area(self):
+        c = Cliente.objects.create(nombre="Ana", telefono="1")
+        self.assertEqual(self.client.get(f"/clientes/{c.pk}/editar/").status_code, 302)  # sin sesión
+        entrar(self.client, "Cuidador", "cuco")
+        self.assertEqual(self.client.get(f"/clientes/{c.pk}/editar/").status_code, 403)

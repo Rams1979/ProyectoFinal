@@ -54,6 +54,9 @@ Prototipo con datos de ejemplo (no es un sistema para operar el hotel). Django +
 - `/articulos/`: código, nombre, tipo (servicio o producto), unidad, precio y activo. Vienen cargados los 10 servicios del hotel con el precio por definir. Sin inventario ni facturación.
 - El chat lee la tarifa por noche y esta lista en cada respuesta: lo que no tiene precio lo deriva a la persona de turno.
 
+## Maestro de clientes ampliado
+- `/clientes/nuevo/` y `/clientes/<id>/editar/` usan un formulario con los campos del CU-02; la ficha del cliente los muestra. El descuento solo lo cambia el administrador.
+
 ## Etapa 15: reportes
 - `/reportes/` (área "Reportes y exportación", solo Administrador por defecto): período a elegir (mes en curso por defecto, hasta 366 días).
 - Ocupación por día con barras, % del período, noches ocupadas y día pico; ingresos netos por método de pago y valor por cobrar; reservas por estado, tasa de cancelación, origen (cliente en línea o personal), clientes nuevos y perros alojados; y los próximos 7 días con llegadas, salidas y requisitos sanitarios pendientes.
