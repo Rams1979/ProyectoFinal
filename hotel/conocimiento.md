@@ -38,8 +38,8 @@ Los requisitos específicos los establece el hotel con su veterinario (POR DEFIN
 ## Tarifa de hospedaje (datos de ejemplo del prototipo)
 - Una noche en habitación individual: $30 por noche. Todas las habitaciones del prototipo son iguales.
 - El total se calcula como noches × $30.
-- Descuentos por varios días o por varios perros: POR DEFINIR.
-- Métodos de pago, anticipo y política de cancelación y devolución: POR DEFINIR.
+- Métodos de pago aceptados: efectivo, SINPE y tarjeta.
+- Descuentos por varios días o por varios perros, anticipo y política de cancelación y devolución: POR DEFINIR.
 
 ## Reservas
 - La disponibilidad real se consulta por fechas en la página de disponibilidad; ahí también se reserva.
@@ -58,5 +58,5 @@ Los requisitos específicos los establece el hotel con su veterinario (POR DEFIN
 
 ## Contacto
 - Se puede contactar al hotel por WhatsApp, correo electrónico y teléfono.
-- Los números y direcciones concretos (teléfono, WhatsApp, correo), el nombre del hotel, la dirección, la ubicación en Google Maps,
-  la página web, Facebook e Instagram: POR DEFINIR. Mientras tanto, el chat toma nombre y teléfono del cliente para que la persona de turno lo contacte.
+- Teléfono y WhatsApp: 8912-1826. Correo electrónico: rolandomata@hotmail.com.
+- El nombre del hotel, la dirección, la ubicación en Google Maps, la página web, Facebook e Instagram: POR DEFINIR. Mientras tanto, el chat toma nombre y teléfono del cliente para que la persona de turno lo contacte.
