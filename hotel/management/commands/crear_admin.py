@@ -1,6 +1,6 @@
 import os
 
-from django.contrib.auth.models import User
+from django.contrib.auth.models import Group, User
 from django.core.management.base import BaseCommand
 
 
@@ -15,5 +15,6 @@ class Command(BaseCommand):
             return
         if User.objects.filter(username=nombre).exists():
             return
-        User.objects.create_superuser(username=nombre, password=clave)
+        u = User.objects.create_superuser(username=nombre, password=clave, first_name="Administrador")
+        u.groups.add(Group.objects.get_or_create(name="Administrador")[0])
         self.stdout.write(f"Administrador '{nombre}' creado.")

@@ -2,7 +2,7 @@ import json
 from datetime import date, time
 from decimal import Decimal, InvalidOperation
 
-from django.contrib.auth import authenticate, login, logout
+from django.contrib.auth import authenticate, login, logout, update_session_auth_hash
 from django.contrib.auth.forms import AuthenticationForm
 from django.contrib.auth.models import Group, User
 from django.contrib.auth.password_validation import validate_password
@@ -386,29 +386,76 @@ def logout_vista(request):
     return redirect("inicio")
 
 
+def _admins_activos_sin(pk):
+    """Administradores activos distintos del usuario dado (para no quedarse sin ninguno)."""
+    return sum(1 for u in User.objects.filter(is_active=True).exclude(pk=pk) if rol(u) == ADMIN)
+
+
+def _poner_perfil(u, perfil):
+    u.groups.clear()
+    u.groups.add(Group.objects.get_or_create(name=perfil)[0])
+    if perfil != ADMIN and u.is_superuser:  # un superusuario sería administrador sin importar el perfil
+        u.is_superuser = False
+        u.save(update_fields=["is_superuser"])
+
+
+def _error_clave(clave):
+    try:
+        validate_password(clave)
+    except ValidationError as e:
+        return " ".join(e.messages)
+    return None
+
+
 @solo_admin
 def usuarios(request):
-    error = None
+    """Lista de usuarios y alta de uno nuevo: usuario, nombre, contraseña y perfil."""
+    error, datos = None, request.POST if request.method == "POST" else {}
     if request.method == "POST":
-        nombre = request.POST.get("username", "").strip()
-        clave = request.POST.get("password", "")
-        nombre_rol = request.POST.get("rol")
-        if not nombre or nombre_rol not in ROLES:
-            error = "Indique usuario y rol."
-        elif User.objects.filter(username__iexact=nombre).exists():
+        usuario, nombre = datos.get("username", "").strip(), datos.get("nombre", "").strip()[:150]
+        perfil, clave = datos.get("rol"), datos.get("password", "")
+        if not usuario or not nombre or perfil not in ROLES:
+            error = "Indique usuario, nombre y perfil."
+        elif User.objects.filter(username__iexact=usuario).exists():
             error = "Ese usuario ya existe."
         else:
-            try:
-                validate_password(clave)
-            except ValidationError as e:
-                error = " ".join(e.messages)
+            error = _error_clave(clave)
         if not error:
-            u = User.objects.create_user(username=nombre, password=clave)
-            u.groups.add(Group.objects.get_or_create(name=nombre_rol)[0])
+            u = User.objects.create_user(username=usuario, password=clave, first_name=nombre)
+            _poner_perfil(u, perfil)
             return redirect("usuarios")
-    filas = [{"u": u, "rol": rol(u) or "Sin rol"} for u in User.objects.order_by("username")]
-    return render(request, "hotel/usuarios.html", {"filas": filas, "roles": ROLES, "error": error},
+    filas = [{"u": u, "rol": rol(u) or "Sin perfil"} for u in User.objects.order_by("username")]
+    return render(request, "hotel/usuarios.html", {"filas": filas, "roles": ROLES, "error": error, "datos": datos},
                   status=400 if error else 200)
+
+
+@solo_admin
+def usuario_editar(request, usuario_id):
+    u = get_object_or_404(User, pk=usuario_id)
+    propio = u.pk == request.user.pk
+    error, datos = None, request.POST if request.method == "POST" else {}
+    if request.method == "POST":
+        nombre, perfil = datos.get("nombre", "").strip()[:150], datos.get("rol")
+        activo = True if propio else datos.get("activo") == "1"
+        clave = datos.get("password", "")
+        if not nombre or perfil not in ROLES:
+            error = "Indique nombre y perfil."
+        elif propio and perfil != rol(u):
+            error = "No puede cambiar su propio perfil."
+        elif (not activo or perfil != ADMIN) and rol(u) == ADMIN and u.is_active and _admins_activos_sin(u.pk) == 0:
+            error = "Debe quedar al menos un administrador activo."
+        elif clave:
+            error = _error_clave(clave)
+        if not error:
+            u.first_name, u.is_active = nombre, activo
+            if clave:
+                u.set_password(clave)
+            u.save()
+            if not propio:
+                _poner_perfil(u, perfil)
+            return redirect("usuarios")
+    return render(request, "hotel/usuario_editar.html", {"u": u, "propio": propio, "perfil": rol(u), "roles": ROLES,
+                  "error": error, "datos": datos}, status=400 if error else 200)
 
 
 @solo_admin
@@ -416,9 +463,31 @@ def usuarios(request):
 def usuario_activo(request, usuario_id):
     u = get_object_or_404(User, pk=usuario_id)
     if u.pk != request.user.pk:  # nadie se desactiva a sí mismo
+        if u.is_active and rol(u) == ADMIN and _admins_activos_sin(u.pk) == 0:
+            return redirect("usuarios")
         u.is_active = not u.is_active
         u.save(update_fields=["is_active"])
     return redirect("usuarios")
+
+
+@personal
+def cambiar_clave(request):
+    """Cada usuario cambia su propia contraseña."""
+    error, hecho = None, False
+    if request.method == "POST":
+        actual, nueva, repite = (request.POST.get(k, "") for k in ("actual", "nueva", "repite"))
+        if not request.user.check_password(actual):
+            error = "La contraseña actual no es correcta."
+        elif nueva != repite:
+            error = "La contraseña nueva y su confirmación no coinciden."
+        else:
+            error = _error_clave(nueva)
+        if not error:
+            request.user.set_password(nueva)
+            request.user.save()
+            update_session_auth_hash(request, request.user)  # no cierra la sesión actual
+            hecho = True
+    return render(request, "hotel/clave.html", {"error": error, "hecho": hecho}, status=400 if error else 200)
 
 
 def _puede_gestionar(request, reserva_id):

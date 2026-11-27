@@ -35,6 +35,11 @@ Prototipo con datos de ejemplo (no es un sistema para operar el hotel). Django +
 - Anticipo opcional: variable `ANTICIPO_PORCENTAJE` (0 por defecto = sin anticipo); solo se muestra, no bloquea.
 - No hay cobro en línea: el sistema solo registra lo que el personal recibe.
 
+## Mantenimiento de usuarios
+- `/usuarios/` (administrador): lista con usuario, nombre, perfil, estado y último ingreso; alta con usuario, nombre completo, contraseña y perfil (Recepción o Administrador).
+- Editar (`/usuarios/<id>/`): nombre, perfil, nueva contraseña (opcional) y activo. No se puede cambiar el propio perfil ni desactivarse, y siempre debe quedar un administrador activo. Los usuarios no se borran, se desactivan, para conservar el historial.
+- `/clave/`: cada usuario cambia su propia contraseña sin cerrar su sesión.
+
 ## Menú principal
 - `/` es el menú con acceso a todas las pantallas y un dato vivo en cada una. La lista de habitaciones pasó a `/habitaciones/`.
 

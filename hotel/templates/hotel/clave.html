@@ -1,0 +1,13 @@
+{% extends "hotel/base.html" %}
+{% block contenido %}
+  <h2>Cambiar mi contraseña</h2>
+  {% if hecho %}<p>Contraseña actualizada.</p>{% endif %}
+  {% if error %}<p class="error">{{ error }}</p>{% endif %}
+  <form class="filtros" method="post">
+    {% csrf_token %}
+    <label>Contraseña actual <input type="password" name="actual" autocomplete="current-password" required></label>
+    <label>Contraseña nueva (mínimo 10 caracteres) <input type="password" name="nueva" autocomplete="new-password" required></label>
+    <label>Repita la contraseña nueva <input type="password" name="repite" autocomplete="new-password" required></label>
+    <button type="submit">Cambiar</button>
+  </form>
+{% endblock %}

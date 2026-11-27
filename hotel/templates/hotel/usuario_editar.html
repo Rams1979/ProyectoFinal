@@ -1,0 +1,18 @@
+{% extends "hotel/base.html" %}
+{% block contenido %}
+  <h2>Editar usuario · {{ u.username }}</h2>
+  {% if error %}<p class="error">{{ error }}</p>{% endif %}
+  <form class="filtros" method="post">
+    {% csrf_token %}
+    <label>Nombre completo <input name="nombre" value="{{ datos.nombre|default:u.first_name }}" maxlength="150" required></label>
+    <label>Perfil
+      <select name="rol" {% if propio %}disabled{% endif %}>{% for r in roles %}<option {% if r == perfil %}selected{% endif %}>{{ r }}</option>{% endfor %}</select>
+      {% if propio %}<input type="hidden" name="rol" value="{{ perfil }}">{% endif %}
+    </label>
+    <label>Contraseña nueva (dejar vacío para no cambiarla) <input type="password" name="password" autocomplete="new-password"></label>
+    {% if not propio %}<label><input type="checkbox" name="activo" value="1" {% if u.is_active %}checked{% endif %}> Usuario activo</label>{% endif %}
+    <button type="submit">Guardar</button>
+  </form>
+  {% if propio %}<p class="nota">Es su propio usuario: no puede cambiar su perfil ni desactivarse.</p>{% endif %}
+  <p><a href="{% url 'usuarios' %}">Volver a usuarios</a></p>
+{% endblock %}

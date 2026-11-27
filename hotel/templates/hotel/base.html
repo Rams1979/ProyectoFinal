@@ -48,7 +48,7 @@
   <nav>
     {% if rol %}
       <a href="{% url 'inicio' %}">Menú</a><a href="{% url 'disponibilidad' %}">Disponibilidad</a><a href="{% url 'panel' %}">Panel</a><a href="{% url 'reservaciones' %}">Reservaciones</a><a href="{% url 'cuidado' %}">Cuidado</a><a href="{% url 'caja' %}">Caja</a><a href="{% url 'clientes' %}">Clientes</a><a href="{% url 'chat' %}">Chat</a>{% if es_admin %}<a href="{% url 'solicitudes' %}">Solicitudes</a><a href="{% url 'usuarios' %}">Usuarios</a>{% endif %}
-      <form class="en-linea" method="post" action="{% url 'logout' %}">{% csrf_token %}<button class="chico" type="submit">Salir ({{ user.username }} · {{ rol }})</button></form>
+      <form class="en-linea" method="post" action="{% url 'logout' %}">{% csrf_token %}<button class="chico" type="submit">Salir ({{ user.first_name|default:user.username }} · {{ rol }})</button></form><a href="{% url 'cambiar_clave' %}">Mi contraseña</a>
     {% else %}
       <a href="{% url 'inicio' %}">Inicio</a><a href="{% url 'disponibilidad' %}">Disponibilidad</a><a href="{% url 'chat' %}">Chat</a><a href="{% url 'login' %}">Ingreso del personal</a>
     {% endif %}

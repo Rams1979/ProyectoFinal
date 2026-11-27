@@ -5,6 +5,7 @@ from django.utils import timezone
 
 from .disponibilidad import habitaciones_libres
 from .models import Habitacion, Reserva
+from .permisos import rol
 
 
 from django.contrib.auth.models import Group, User
@@ -387,9 +388,9 @@ class AccesoTests(TestCase):
 
     def test_admin_crea_y_desactiva_usuarios(self):
         admin = entrar(self.client, "Administrador")
-        malo = self.client.post("/usuarios/", {"username": "nuevo", "password": "corta", "rol": "Recepción"})
+        malo = self.client.post("/usuarios/", {"username": "nuevo", "nombre": "Nuevo Usuario", "password": "corta", "rol": "Recepción"})
         self.assertEqual(malo.status_code, 400)
-        ok = self.client.post("/usuarios/", {"username": "nuevo", "password": "una-clave-larga-1", "rol": "Recepción"})
+        ok = self.client.post("/usuarios/", {"username": "nuevo", "nombre": "Nuevo Usuario", "password": "una-clave-larga-1", "rol": "Recepción"})
         self.assertEqual(ok.status_code, 302)
         nuevo = User.objects.get(username="nuevo")
         self.client.post(f"/usuarios/{nuevo.pk}/activo/")
@@ -659,3 +660,103 @@ class PagosTests(TestCase):
         self._pagar("10")
         call_command("limpiar_demo")
         self.assertEqual((Pago.objects.count(), Reserva.objects.count()), (0, 0))
+
+
+class MantenimientoUsuariosTests(TestCase):
+    def setUp(self):
+        self.admin = entrar(self.client, "Administrador", "jefe")
+
+    def _crear(self, usuario="rita", rol_="Recepción", nombre="Rita Mora", clave="una-clave-larga-1"):
+        return self.client.post("/usuarios/", {"username": usuario, "nombre": nombre, "password": clave, "rol": rol_})
+
+    def test_alta_con_nombre_y_perfil_y_exige_el_nombre(self):
+        self.assertEqual(self._crear(nombre="").status_code, 400)
+        self.assertEqual(self._crear().status_code, 302)
+        u = User.objects.get(username="rita")
+        self.assertEqual((u.first_name, list(u.groups.values_list("name", flat=True))), ("Rita Mora", ["Recepción"]))
+        self.assertContains(self.client.get("/usuarios/"), "Rita Mora")
+
+    def test_editar_nombre_perfil_y_clave(self):
+        self._crear()
+        u = User.objects.get(username="rita")
+        r = self.client.post(f"/usuarios/{u.pk}/", {"nombre": "Rita M.", "rol": "Administrador", "activo": "1", "password": ""})
+        self.assertEqual(r.status_code, 302)
+        u.refresh_from_db()
+        self.assertEqual((u.first_name, rol(u)), ("Rita M.", "Administrador"))
+        self.assertTrue(u.check_password("una-clave-larga-1"))  # clave vacía no la cambia
+        self.assertEqual(self.client.post(f"/usuarios/{u.pk}/", {"nombre": "Rita M.", "rol": "Recepción", "activo": "1", "password": "corta"}).status_code, 400)
+        self.client.post(f"/usuarios/{u.pk}/", {"nombre": "Rita M.", "rol": "Recepción", "activo": "1", "password": "clave-nueva-larga-2"})
+        u.refresh_from_db()
+        self.assertTrue(u.check_password("clave-nueva-larga-2"))
+        self.assertEqual(rol(u), "Recepción")
+
+    def test_desactivar_desde_la_edicion_bloquea_el_ingreso(self):
+        self._crear()
+        u = User.objects.get(username="rita")
+        self.client.post(f"/usuarios/{u.pk}/", {"nombre": "Rita Mora", "rol": "Recepción"})  # sin "activo"
+        u.refresh_from_db()
+        self.assertFalse(u.is_active)
+        self.client.post("/salir/")
+        self.assertEqual(self.client.post("/ingresar/", {"username": "rita", "password": "una-clave-larga-1"}).status_code, 400)
+
+    def test_no_se_cambia_su_propio_perfil_ni_se_deja_sin_administrador(self):
+        r = self.client.post(f"/usuarios/{self.admin.pk}/", {"nombre": "Jefe", "rol": "Recepción"})
+        self.assertContains(r, "propio perfil", status_code=400)
+        # otro administrador que intenta degradar al único restante
+        self._crear("ana", "Administrador", "Ana Gómez")
+        ana = User.objects.get(username="ana")
+        self.client.post("/salir/")
+        self.client.force_login(ana)
+        self.client.post(f"/usuarios/{self.admin.pk}/", {"nombre": "Jefe", "rol": "Recepción", "activo": "1"})  # queda ana: permitido
+        self.assertEqual(rol(User.objects.get(pk=self.admin.pk)), "Recepción")
+        # ana es ahora la única administradora: no se puede desactivar ni degradar a nadie más que lo deje en cero
+        otro = User.objects.get(pk=self.admin.pk)
+        self.client.post(f"/usuarios/{otro.pk}/", {"nombre": "Jefe", "rol": "Administrador", "activo": "1"})
+        self.client.force_login(otro)
+        r = self.client.post(f"/usuarios/{ana.pk}/", {"nombre": "Ana", "rol": "Recepción", "activo": "1"})
+        self.assertEqual(r.status_code, 302)  # hay otro administrador (el propio)
+        self.client.force_login(ana)  # ana ya es Recepción: sin acceso
+        self.assertEqual(self.client.get("/usuarios/").status_code, 403)
+
+    def test_ultimo_administrador_no_se_desactiva_ni_degrada(self):
+        self._crear("ana", "Administrador", "Ana")
+        ana = User.objects.get(username="ana")
+        self.client.post(f"/usuarios/{ana.pk}/activo/")  # hay otro admin (jefe): se puede
+        ana.refresh_from_db()
+        self.assertFalse(ana.is_active)
+        # jefe es el único activo: otro admin inactivo no cuenta; no puede quedar en cero
+        self.client.post(f"/usuarios/{ana.pk}/activo/")
+        ana.refresh_from_db()
+        self.assertTrue(ana.is_active)
+        self.client.force_login(ana)
+        self.client.post(f"/usuarios/{self.admin.pk}/activo/")
+        self.admin.refresh_from_db()
+        self.assertFalse(self.admin.is_active)  # ana sigue siendo admin activa
+        r = self.client.post(f"/usuarios/{ana.pk}/", {"nombre": "Ana", "rol": "Administrador"})  # propia, sin 'activo': se mantiene activa
+        self.assertEqual(r.status_code, 302)
+        self.assertTrue(User.objects.get(pk=ana.pk).is_active)
+
+    def test_superusuario_degradado_deja_de_ser_administrador(self):
+        su = User.objects.create_superuser("root", password="una-clave-larga-1")
+        self.client.post(f"/usuarios/{su.pk}/", {"nombre": "Root", "rol": "Recepción", "activo": "1"})
+        su.refresh_from_db()
+        self.assertEqual((su.is_superuser, rol(su)), (False, "Recepción"))
+
+    def test_cada_usuario_cambia_su_contrasena(self):
+        self._crear()
+        self.client.post("/salir/")
+        self.client.post("/ingresar/", {"username": "rita", "password": "una-clave-larga-1"})
+        self.assertContains(self.client.post("/clave/", {"actual": "mala", "nueva": "otra-clave-larga-3", "repite": "otra-clave-larga-3"}), "no es correcta", status_code=400)
+        self.assertContains(self.client.post("/clave/", {"actual": "una-clave-larga-1", "nueva": "otra-clave-larga-3", "repite": "distinta-larga-4"}), "no coinciden", status_code=400)
+        self.assertEqual(self.client.post("/clave/", {"actual": "una-clave-larga-1", "nueva": "corta", "repite": "corta"}).status_code, 400)
+        r = self.client.post("/clave/", {"actual": "una-clave-larga-1", "nueva": "otra-clave-larga-3", "repite": "otra-clave-larga-3"})
+        self.assertContains(r, "Contraseña actualizada")
+        self.assertEqual(self.client.get("/panel/").status_code, 200)  # la sesión sigue abierta
+        self.assertTrue(User.objects.get(username="rita").check_password("otra-clave-larga-3"))
+
+    def test_recepcion_no_edita_usuarios(self):
+        self.client.post("/salir/")
+        entrar(self.client, "Recepción", "recep")
+        self.assertEqual(self.client.get(f"/usuarios/{self.admin.pk}/").status_code, 403)
+        self.assertEqual(self.client.post(f"/usuarios/{self.admin.pk}/", {"nombre": "X", "rol": "Recepción"}).status_code, 403)
+        self.assertEqual(self.client.get("/clave/").status_code, 200)

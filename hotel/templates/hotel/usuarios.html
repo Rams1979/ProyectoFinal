@@ -3,18 +3,21 @@
   <h2>Usuarios</h2>
   {% if error %}<p class="error">{{ error }}</p>{% endif %}
   <table>
-    <tr><th>Usuario</th><th>Rol</th><th>Estado</th><th></th></tr>
+    <tr><th>Usuario</th><th>Nombre</th><th>Perfil</th><th>Estado</th><th>Último ingreso</th><th></th></tr>
     {% for f in filas %}
-      <tr><td>{{ f.u.username }}</td><td>{{ f.rol }}</td><td>{% if f.u.is_active %}Activo{% else %}Desactivado{% endif %}</td>
-        <td>{% if f.u.pk != user.pk %}<form class="en-linea" method="post" action="{% url 'usuario_activo' f.u.pk %}">{% csrf_token %}<button class="chico" type="submit">{% if f.u.is_active %}Desactivar{% else %}Activar{% endif %}</button></form>{% endif %}</td></tr>
+      <tr><td>{{ f.u.username }}</td><td>{{ f.u.first_name }}</td><td>{{ f.rol }}</td><td>{% if f.u.is_active %}Activo{% else %}Desactivado{% endif %}</td>
+        <td>{{ f.u.last_login|date:"d/m/Y H:i"|default:"—" }}</td>
+        <td><a href="{% url 'usuario_editar' f.u.pk %}">Editar</a></td></tr>
     {% endfor %}
   </table>
   <h3>Nuevo usuario</h3>
   <form class="filtros" method="post">
     {% csrf_token %}
-    <label>Usuario <input name="username" required></label>
+    <label>Usuario <input name="username" value="{{ datos.username }}" required></label>
+    <label>Nombre completo <input name="nombre" value="{{ datos.nombre }}" maxlength="150" required></label>
     <label>Contraseña (mínimo 10 caracteres) <input type="password" name="password" autocomplete="new-password" required></label>
-    <label>Rol <select name="rol">{% for r in roles %}<option>{{ r }}</option>{% endfor %}</select></label>
+    <label>Perfil <select name="rol">{% for r in roles %}<option {% if datos.rol == r %}selected{% endif %}>{{ r }}</option>{% endfor %}</select></label>
     <button type="submit">Crear</button>
   </form>
+  <p class="nota">Recepción: panel, reservas, clientes, cuidado y caja. Administrador: además solicitudes de contacto y usuarios. Los usuarios no se borran, se desactivan, para conservar el historial.</p>
 {% endblock %}

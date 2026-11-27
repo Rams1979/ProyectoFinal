@@ -7,7 +7,7 @@ Resultado de las pruebas del recorrido completo. Lo que el prototipo hace a prop
 - Reservas falsas desde el sitio público: sin límite de uso ni confirmación; hoy el personal las cancela una por una.
 - Cancelación por el visitante: depende de su sesión; si cierra el navegador debe llamar al hotel.
 - Reactivar una reserva cancelada por error: no existe; se crea una nueva.
-- Cambio y recuperación de contraseña: no existen.
+- Recuperación de contraseña por olvido: no existe; el administrador la restablece desde Usuarios.
 - Bloqueo de login por usuario y en memoria de cada proceso (ver observaciones técnicas).
 - Chat sin límite de uso: consume saldo de la API; clave de Anthropic sin configurar todavía.
 - Repositorio público con teléfono y correo del hotel: decidir si pasa a privado.
@@ -37,5 +37,5 @@ Se completan en `hotel/conocimiento.md`.
 - `limpiar_demo` borra las reservas y solicitudes de prueba antes de la demostración (`python manage.py limpiar_demo`).
 
 - Etapa 6: los requisitos sanitarios (5 tipos) son los del chat; la versión final del veterinario sigue POR DEFINIR. Sin adjuntar carné ni fotos. Clientes identificados solo por teléfono, sin edición ni borrado.
-- Etapa 7: sin cambio de contraseña propio (el administrador crea un usuario nuevo o desactiva el anterior); sin recuperación de contraseña. El bloqueo por intentos usa la memoria de cada proceso, así que con varios procesos el límite real es mayor; va por usuario, por lo que alguien podría bloquear a un usuario conocido 15 minutos. El chat y la reserva siguen públicos y sin límite de uso: pueden llenar la agenda de reservas falsas y consumir saldo de la API.
+- Etapa 7: el administrador restablece contraseñas desde Usuarios; sin recuperación de contraseña por correo. El bloqueo por intentos usa la memoria de cada proceso, así que con varios procesos el límite real es mayor; va por usuario, por lo que alguien podría bloquear a un usuario conocido 15 minutos. El chat y la reserva siguen públicos y sin límite de uso: pueden llenar la agenda de reservas falsas y consumir saldo de la API.
 - Etapa 8: la política de devolución sigue POR DEFINIR; la cancelación solo libera la habitación y avisa que el hotel se comunicará. El visitante pierde la opción de cancelar si cierra el navegador (la reserva queda ligada a su sesión); entonces debe llamar al hotel. Cualquier visitante puede seguir creando reservas falsas, ahora el personal las cancela una por una.
