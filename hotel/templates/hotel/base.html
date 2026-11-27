@@ -8,18 +8,18 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700&family=Shippori+Mincho:wght@500;700;800&display=swap">
   <style>
-    :root { --bg:#FEEED3; --ink:#16241B; --muted:#55645A; --moss:#1F4D36; --leaf:#7FA77A; --tint:#E3ECDD; --line:#D3DECD; --seal:#B8402B;
+    :root { --bg:#FEEED3; --ink:#16241B; --muted:#3B4A40; --moss:#1F4D36; --leaf:#7FA77A; --tint:#E3ECDD; --line:#D3DECD; --seal:#B8402B;
             --font-display:"Shippori Mincho","Hiragino Mincho ProN","Yu Mincho",Georgia,serif; --font-body:"Hanken Grotesk","Segoe UI",system-ui,sans-serif; }
     * { box-sizing: border-box; }
-    body { font-family: var(--font-body); font-size: 16px; line-height: 1.55; margin: 0; color: var(--ink); background: var(--bg); }
+    body { font-family: var(--font-body); font-size: 16px; line-height: 1.55; margin: 0; color: var(--ink); background: #F6AD55 url('{% static "hotel/madera.jpg" %}') repeat; background-attachment: fixed; }
     h1, h2, h3 { font-family: var(--font-display); line-height: 1.15; color: var(--ink); }
     h2 { font-size: clamp(26px, 4vw, 36px); font-weight: 800; margin: 1.2rem 0 .6rem; }
     h3 { font-size: 21px; font-weight: 700; margin: 1.4rem 0 .5rem; }
     a { color: var(--moss); }
     :focus-visible { outline: 3px solid var(--seal); outline-offset: 3px; border-radius: 4px; }
     .wrap { max-width: 1120px; margin-inline: auto; padding: 0 16px; }
-    main.wrap { padding-top: 1rem; padding-bottom: 3rem; }
-    .topbar { position: sticky; top: 0; z-index: 30; background: rgba(254,238,211,.94); backdrop-filter: blur(8px); border-bottom: 1px solid var(--line); }
+    main.wrap { padding-top: 1rem; padding-bottom: 2rem; margin-block: 1rem; background: rgba(254,238,211,.94); border-radius: 14px; box-shadow: 0 6px 24px rgba(90,45,5,.25); }
+    .topbar { position: sticky; top: 0; z-index: 30; background: rgba(255,244,225,.93); backdrop-filter: blur(8px); border-bottom: 1px solid var(--line); }
     .topbar-in { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; padding-block: 10px; }
     .brand { display: flex; align-items: center; gap: 12px; text-decoration: none; color: var(--ink); margin-right: auto; }
     .brand b { font-family: var(--font-display); font-size: 26px; font-weight: 800; line-height: 1.05; }
@@ -72,7 +72,7 @@
     .resumen { display: flex; flex-wrap: wrap; gap: .5rem 1.2rem; margin: .5rem 0 1rem; }
     .resumen strong { font-family: var(--font-display); font-size: 1.3rem; }
     form.en-linea { display: inline; margin: 0; }
-    footer.pie { border-top: 1px solid var(--line); color: var(--muted); font-size: 14px; padding-block: 18px; }
+    footer.pie { color: #3B2A12; font-weight: 500; font-size: 14px; padding-block: 18px; }
   </style>
 </head>
 <body>
