@@ -89,5 +89,19 @@
   {% block contenido %}{% endblock %}
 </main>
 <footer class="pie"><div class="wrap">Prototipo conceptual con datos de ejemplo.</div></footer>
+<script>
+  // Rota los logos en cada carga y evita repetir el de la visita anterior.
+  (function () {
+    var imgs = document.querySelectorAll("img.logo-mini, img.logo-grande");
+    if (!imgs.length) return;
+    var base = imgs[0].src.replace(/logo-\d\.webp.*$/, "");
+    var ultimo = null;
+    try { ultimo = localStorage.getItem("ultimoLogo"); } catch (e) {}
+    var opciones = [1, 2, 3, 4, 5].filter(function (n) { return String(n) !== ultimo; });
+    var n = opciones[Math.floor(Math.random() * opciones.length)];
+    imgs.forEach(function (i) { i.src = base + "logo-" + n + ".webp"; });
+    try { localStorage.setItem("ultimoLogo", String(n)); } catch (e) {}
+  })();
+</script>
 </body>
 </html>
