@@ -1630,3 +1630,28 @@ class RegistroDiarioTests(TestCase):
         pagina = self.client.get("/clave/")
         self.assertContains(pagina, "Mostrar lo que escribo")
         self.assertContains(pagina, 'id="ver-clave"')
+
+
+class DatosDemoTests(TestCase):
+    def test_genera_datos_y_se_puede_reemplazar(self):
+        from django.core.management import call_command
+        from django.core.management.base import CommandError
+        from .models import Cliente
+        call_command("datos_demo", clientes=8, meses=1, verbosity=0)
+        self.assertEqual(Cliente.objects.count(), 8)
+        self.assertTrue(Reserva.objects.exists() and Pago.objects.exists())
+        with self.assertRaises(CommandError):
+            call_command("datos_demo", clientes=8, meses=1, verbosity=0)
+        call_command("datos_demo", clientes=5, meses=1, reemplazar=True, verbosity=0)
+        self.assertEqual(Cliente.objects.count(), 5)
+        entrar(self.client, "Administrador")
+        for url in ("/reportes/", "/cuidado/", "/panel/", "/reservaciones/"):
+            self.assertEqual(self.client.get(url).status_code, 200, url)
+
+    def test_se_niega_si_hay_clientes_reales(self):
+        from django.core.management import call_command
+        from django.core.management.base import CommandError
+        from .models import Cliente
+        Cliente.objects.create(nombre="Real", telefono="7000-0000")
+        with self.assertRaises(CommandError):
+            call_command("datos_demo", clientes=3, meses=1, verbosity=0)

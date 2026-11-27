@@ -48,7 +48,7 @@ Se completan en `hotel/conocimiento.md`.
 - El repositorio es público y contiene el teléfono y correo del hotel.
 - Dos reservas simultáneas de la misma habitación se evitan bloqueando la fila (PostgreSQL); en SQLite local no aplica el bloqueo.
 - No hay cancelación ni edición de reservas.
-- `limpiar_demo` borra las reservas y solicitudes de prueba antes de la demostración (`python manage.py limpiar_demo`).
+- `datos_demo` genera datos ficticios (60 clientes con teléfono 8800-xxxx, mascotas con vacunas y plan, unos 580 reservas de 6 meses atrás a 45 días adelante, pagos y registros de cuidado) para probar reportes y Power BI; `--reemplazar` los regenera y se niega si hay clientes reales. `limpiar_demo` borra las reservas y solicitudes de prueba antes de la demostración (`python manage.py limpiar_demo`).
 
 - Etapa 6: los requisitos sanitarios (5 tipos) son los del chat; la versión final del veterinario sigue POR DEFINIR. Sin adjuntar carné ni fotos. Clientes identificados solo por teléfono, sin edición ni borrado.
 - Etapa 7: el administrador restablece contraseñas desde Usuarios; sin recuperación de contraseña por correo. El bloqueo por intentos usa la memoria de cada proceso, así que con varios procesos el límite real es mayor; va por usuario, por lo que alguien podría bloquear a un usuario conocido 15 minutos. El chat y la reserva siguen públicos y sin límite de uso: pueden llenar la agenda de reservas falsas y consumir saldo de la API.
