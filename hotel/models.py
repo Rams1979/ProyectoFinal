@@ -6,9 +6,11 @@ from django.db.models import Sum
 
 
 class Habitacion(models.Model):
+    TAMANOS = [("pequena", "Pequeña"), ("mediana", "Mediana"), ("grande", "Grande")]
     numero = models.PositiveSmallIntegerField(unique=True)
     tarifa_noche = models.DecimalField(max_digits=8, decimal_places=2, default=30)
     en_limpieza = models.BooleanField(default=False)
+    tamano = models.CharField(max_length=10, choices=TAMANOS, default="mediana")
     activa = models.BooleanField(default=True)  # una habitación inactiva no se ofrece ni aparece en el panel
     nota = models.CharField(max_length=200, blank=True)
 

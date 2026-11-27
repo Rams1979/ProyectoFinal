@@ -797,8 +797,10 @@ def habitaciones(request):
                 error = "Ya existe esa habitación."
             elif not ok or not tarifa:
                 error = "Escriba una tarifa mayor que cero."
+            elif datos.get("tamano", "mediana") not in dict(Habitacion.TAMANOS):
+                error = "Elija el tamaño de la habitación."
             else:
-                Habitacion.objects.create(numero=int(numero), tarifa_noche=tarifa)
+                Habitacion.objects.create(numero=int(numero), tarifa_noche=tarifa, tamano=datos.get("tamano", "mediana"))
                 return redirect("habitaciones")
         elif accion == "tarifa_todas":
             if not ok or not tarifa:
@@ -810,7 +812,7 @@ def habitaciones(request):
     for h in Habitacion.objects.prefetch_related("bloqueos"):
         proximos = [b for b in h.bloqueos.all() if b.hasta >= hoy]
         filas.append({"h": h, "mantenimiento": next((b for b in proximos if b.desde <= hoy), None), "proximo": proximos[:1] and proximos[0]})
-    return render(request, "hotel/habitaciones.html", {"filas": filas, "error": error, "datos": datos},
+    return render(request, "hotel/habitaciones.html", {"filas": filas, "error": error, "datos": datos, "tamanos": Habitacion.TAMANOS},
                   status=400 if error else 200)
 
 
@@ -828,10 +830,13 @@ def habitacion_editar(request, habitacion_id):
                 vigentes = Reserva.objects.filter(habitacion=h, estado__in=[Reserva.CONFIRMADA, Reserva.ACTIVA], salida__gt=hoy).count()
                 if not ok or not tarifa:
                     error = "Escriba una tarifa mayor que cero."
+                elif datos.get("tamano", h.tamano) not in dict(Habitacion.TAMANOS):
+                    error = "Elija el tamaño de la habitación."
                 elif not activa and vigentes:
                     error, conflicto = f"No se puede desactivar: tiene {vigentes} reserva(s) vigente(s). Cancélelas o muévalas primero.", True
                 else:
                     h.tarifa_noche, h.activa, h.nota = tarifa, activa, datos.get("nota", "").strip()[:200]
+                    h.tamano = datos.get("tamano", h.tamano)
                     h.save()
                     return redirect("habitaciones")
             elif accion == "bloqueo":
@@ -853,7 +858,7 @@ def habitacion_editar(request, habitacion_id):
                 BloqueoHabitacion.objects.filter(pk=datos.get("bloqueo_id"), habitacion=h).delete()
                 return redirect("habitacion_editar", habitacion_id=h.pk)
     return render(request, "hotel/habitacion_editar.html", {"h": h, "bloqueos": h.bloqueos.filter(hasta__gte=hoy),
-                  "error": error, "datos": datos, "hoy": hoy}, status=(409 if conflicto else 400) if error else 200)
+                  "error": error, "datos": datos, "hoy": hoy, "tamanos": Habitacion.TAMANOS}, status=(409 if conflicto else 400) if error else 200)
 
 
 # ---------------------------------------------------------------- maestro de artículos (lista de precios)

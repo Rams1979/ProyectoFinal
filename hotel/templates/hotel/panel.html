@@ -12,7 +12,7 @@
   <ul class="panel">
     {% for f in filas %}
       <li class="{{ f.clave }}">
-        <strong>{{ f.hab }}</strong>
+        <strong>{{ f.hab }} <small>· {{ f.hab.get_tamano_display }}</small></strong>
         <span>{{ f.etiqueta }}</span>
         {% if f.reserva %}
           <span>{{ f.reserva.nombre }}{% if f.reserva.perros_texto %} · {{ f.reserva.perros_texto }}{% endif %}</span>

@@ -77,8 +77,12 @@ def consultar_disponibilidad(entrada: str, salida: str) -> dict:
     disponibles = habitaciones_libres(e, s)
     libres = disponibles.count()
     tarifa = disponibles.order_by("tarifa_noche").values_list("tarifa_noche", flat=True).first() or 0  # la más baja entre las libres
+    por_tamano = {}
+    for h in disponibles:
+        por_tamano[h.get_tamano_display()] = por_tamano.get(h.get_tamano_display(), 0) + 1
     return {
         "habitaciones_libres": libres,
+        "libres_por_tamano": por_tamano,
         "noches": noches,
         "tarifa_noche_usd": float(tarifa),
         "total_por_habitacion_usd": float(tarifa * noches),

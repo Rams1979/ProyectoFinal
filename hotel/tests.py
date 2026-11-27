@@ -51,7 +51,7 @@ class DisponibilidadTests(TestCase):
         self.assertContains(r, "posterior")
         r = self.client.get("/disponibilidad/", {"entrada": d.isoformat(), "salida": (d + timedelta(days=2)).isoformat()})
         self.assertContains(r, "Habitaciones libres (30)")
-        self.assertContains(r, "Habitación 01 · $60")
+        self.assertContains(r, "Habitación 01 · Mediana · $60")
 
 
 class ReservaTests(TestCase):
@@ -1215,3 +1215,32 @@ class LogosTests(TestCase):
         self.assertContains(self.client.get("/"), "logos/logo-")
         for n in range(1, 6):
             self.assertEqual(self.client.get(f"/static/hotel/logos/logo-{n}.webp").status_code, 200)
+
+
+class TamanoHabitacionTests(TestCase):
+    def test_tamano_por_defecto_edicion_y_alta(self):
+        from .models import Habitacion
+        self.assertEqual(Habitacion.objects.get(numero=1).tamano, "mediana")
+        entrar(self.client, "Administrador")
+        h = Habitacion.objects.get(numero=1)
+        r = self.client.post(f"/habitaciones/{h.pk}/", {"accion": "guardar", "tarifa": "30", "tamano": "grande", "activa": "1"})
+        self.assertEqual(r.status_code, 302)
+        h.refresh_from_db()
+        self.assertEqual(h.tamano, "grande")
+        self.assertEqual(self.client.post(f"/habitaciones/{h.pk}/", {"accion": "guardar", "tarifa": "30", "tamano": "enorme", "activa": "1"}).status_code, 400)
+        self.assertEqual(self.client.post("/habitaciones/", {"accion": "nueva", "numero": "31", "tarifa": "40", "tamano": "pequena"}).status_code, 302)
+        self.assertEqual(Habitacion.objects.get(numero=31).tamano, "pequena")
+        self.assertEqual(self.client.post("/habitaciones/", {"accion": "nueva", "numero": "32", "tarifa": "40", "tamano": "x"}).status_code, 400)
+        self.assertContains(self.client.get("/habitaciones/"), "Pequeña")
+
+    def test_se_muestra_en_disponibilidad_y_panel_y_chat(self):
+        from . import chat
+        from .models import Habitacion
+        Habitacion.objects.filter(numero=1).update(tamano="grande")
+        e = timezone.localdate() + timedelta(days=3)
+        s = e + timedelta(days=2)
+        self.assertContains(self.client.get("/disponibilidad/", {"entrada": e.isoformat(), "salida": s.isoformat()}), "Grande")
+        r = chat.consultar_disponibilidad(e.isoformat(), s.isoformat())
+        self.assertEqual(r["libres_por_tamano"], {"Grande": 1, "Mediana": 29})
+        entrar(self.client, "Administrador")
+        self.assertContains(self.client.get("/panel/"), "Grande")

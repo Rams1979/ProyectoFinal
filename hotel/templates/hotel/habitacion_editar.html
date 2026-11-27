@@ -5,6 +5,7 @@
   <form class="filtros" method="post">
     {% csrf_token %}<input type="hidden" name="accion" value="guardar">
     <label>Tarifa por noche (USD) <input name="tarifa" inputmode="decimal" value="{{ datos.tarifa|default:h.tarifa_noche }}" required></label>
+    <label>Tamaño <select name="tamano">{% for v, e in tamanos %}<option value="{{ v }}"{% if v == h.tamano %} selected{% endif %}>{{ e }}</option>{% endfor %}</select></label>
     <label>Nota <input name="nota" maxlength="200" value="{{ datos.nota|default:h.nota }}"></label>
     <label><input type="checkbox" name="activa" value="1" {% if h.activa %}checked{% endif %}> Habitación activa</label>
     <button type="submit">Guardar</button>

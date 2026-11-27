@@ -11,7 +11,7 @@
     <h3>Habitaciones libres ({{ libres|length }}) · {{ noches }} noche{{ noches|pluralize }}</h3>
     <ul class="lista">
       {% for h, total in libres %}
-        <li><span>{{ h }} · ${{ total|floatformat:0 }}</span><a class="boton" href="{% url 'reservar' h.pk %}?entrada={{ entrada_txt }}&salida={{ salida_txt }}">Reservar</a></li>
+        <li><span>{{ h }} · {{ h.get_tamano_display }} · ${{ total|floatformat:0 }}</span><a class="boton" href="{% url 'reservar' h.pk %}?entrada={{ entrada_txt }}&salida={{ salida_txt }}">Reservar</a></li>
       {% empty %}
         <li>No hay habitaciones libres para esas fechas.</li>
       {% endfor %}
