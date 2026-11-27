@@ -136,3 +136,49 @@ class ChatTests(TestCase):
         self.assertEqual(self.client.post("/chat/mensaje/", "no json", content_type="application/json").status_code, 400)
         self.assertEqual(self._post("x").status_code, 400)
         self.assertContains(self.client.get("/chat/"), "Chat del hotel")
+
+
+from django.core.management import call_command
+
+
+class RecorridoCompletoTests(TestCase):
+    """Recorrido de la demostración: disponibilidad -> reserva -> lista -> chat sin clave."""
+
+    def test_recorrido(self):
+        d = timezone.localdate() + timedelta(days=10)
+        entrada, salida = d.isoformat(), (d + timedelta(days=3)).isoformat()
+
+        r = self.client.get("/disponibilidad/", {"entrada": entrada, "salida": salida})
+        self.assertContains(r, "Habitaciones libres (30)")
+        self.assertContains(r, "3 noches")
+
+        r = self.client.get("/reservar/5/", {"entrada": entrada, "salida": salida})
+        self.assertContains(r, "Total $90")
+        r = self.client.post("/reservar/5/", {"entrada": entrada, "salida": salida, "nombre": "Luis", "telefono": "7000-0000"}, follow=True)
+        self.assertContains(r, "Reserva confirmada")
+        self.assertContains(r, "pagada")
+
+        self.assertContains(self.client.get("/reservaciones/"), "Luis")
+        r = self.client.get("/disponibilidad/", {"entrada": entrada, "salida": salida})
+        self.assertContains(r, "Habitaciones libres (29)")
+
+        # Reserva contigua (entra el día que sale la otra): permitida
+        r = self.client.post("/reservar/5/", {"entrada": salida, "salida": (d + timedelta(days=4)).isoformat(),
+                                              "nombre": "Eva", "telefono": "7000-1111"})
+        self.assertEqual(r.status_code, 302)
+
+        import os
+        os.environ.pop("ANTHROPIC_API_KEY", None)
+        r = self.client.post("/chat/mensaje/", json.dumps({"historial": [{"role": "user", "content": "hola"}]}),
+                             content_type="application/json")
+        self.assertEqual(r.status_code, 200)
+
+    def test_limpiar_demo_conserva_habitaciones(self):
+        d = timezone.localdate() + timedelta(days=2)
+        Reserva.objects.create(habitacion=Habitacion.objects.get(numero=1), nombre="A", telefono="1",
+                               entrada=d, salida=d + timedelta(days=1))
+        SolicitudContacto.objects.create(nombre="B", telefono="2")
+        call_command("limpiar_demo")
+        self.assertEqual(Reserva.objects.count(), 0)
+        self.assertEqual(SolicitudContacto.objects.count(), 0)
+        self.assertEqual(Habitacion.objects.count(), 30)
