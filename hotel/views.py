@@ -2,6 +2,7 @@ import json
 from datetime import date
 
 from django.db import transaction
+from django.db.models import Q
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
@@ -9,7 +10,7 @@ from django.views.decorators.http import require_POST
 
 from .chat import responder as chat_responder
 from .disponibilidad import habitaciones_libres
-from .models import Habitacion, Reserva, SolicitudContacto
+from .models import Cliente, Habitacion, Perro, Reserva, SolicitudContacto, Vacuna
 
 
 def inicio(request):
@@ -69,13 +70,14 @@ def reservar(request, habitacion_id):
     noches = (salida - entrada).days
     nombre = datos.get("nombre", "").strip()
     telefono = datos.get("telefono", "").strip()
+    perro_nombre = datos.get("perro", "").strip()[:80]
 
     with transaction.atomic():
         # Se bloquea la habitación para que dos reservas simultáneas no se traslapen.
         habitacion = get_object_or_404(Habitacion.objects.select_for_update(), pk=habitacion_id)
         libre = habitaciones_libres(entrada, salida).filter(pk=habitacion.pk).exists()
         contexto.update(habitacion=habitacion, noches=noches, total=habitacion.tarifa_noche * noches,
-                        nombre=nombre, telefono=telefono)
+                        nombre=nombre, telefono=telefono, perro=perro_nombre)
         if not libre:
             contexto["error"] = "Esa habitación ya no está libre para esas fechas. Elija otra."
             contexto["bloqueado"] = True
@@ -84,8 +86,14 @@ def reservar(request, habitacion_id):
             if not nombre or not telefono:
                 contexto["error"] = "Escriba su nombre y su teléfono."
                 return render(request, "hotel/reservar.html", contexto, status=400)
+            cliente, _ = Cliente.objects.get_or_create(telefono=telefono, defaults={"nombre": nombre})
+            perro_ref = None
+            if perro_nombre:
+                perro_ref = cliente.perros.filter(nombre__iexact=perro_nombre).first() or \
+                    Perro.objects.create(cliente=cliente, nombre=perro_nombre)
             reserva = Reserva.objects.create(
-                habitacion=habitacion, nombre=nombre, telefono=telefono, entrada=entrada, salida=salida
+                habitacion=habitacion, nombre=nombre, telefono=telefono, entrada=entrada, salida=salida,
+                cliente=cliente, perro_ref=perro_ref, perro=perro_nombre,
             )
             return redirect("reserva_confirmada", reserva_id=reserva.pk)
     return render(request, "hotel/reservar.html", contexto)
@@ -177,11 +185,21 @@ def checkin(request, reserva_id):
             contexto["error"] = error
             contexto["bloqueado"] = True
             return render(request, "hotel/checkin.html", contexto, status=409)
+        contexto["pendientes"] = reserva.perro_ref.pendientes(reserva.salida) if reserva.perro_ref else None
         if request.method == "POST":
-            perro = request.POST.get("perro", "").strip()
+            perro = request.POST.get("perro", "").strip() or reserva.perro
             if not perro:
                 contexto["error"] = "Escriba el nombre del perro."
                 return render(request, "hotel/checkin.html", contexto, status=400)
+            if contexto["pendientes"] and not request.POST.get("autoriza"):
+                contexto["error"] = "Faltan requisitos sanitarios. Marque la autorización de recepción para continuar."
+                return render(request, "hotel/checkin.html", contexto, status=400)
+            if reserva.perro_ref is None:
+                if reserva.cliente is None:
+                    reserva.cliente, _ = Cliente.objects.get_or_create(
+                        telefono=reserva.telefono, defaults={"nombre": reserva.nombre})
+                reserva.perro_ref = reserva.cliente.perros.filter(nombre__iexact=perro).first() or \
+                    Perro.objects.create(cliente=reserva.cliente, nombre=perro[:80])
             reserva.estado = Reserva.ACTIVA
             reserva.perro = perro[:80]
             reserva.checkin_en = timezone.now()
@@ -210,3 +228,58 @@ def checkout(request, reserva_id):
 def limpieza_lista(request, habitacion_id):
     Habitacion.objects.filter(pk=habitacion_id).update(en_limpieza=False)
     return redirect("panel")
+
+
+def clientes(request):
+    q = request.GET.get("q", "").strip()
+    lista = Cliente.objects.prefetch_related("perros")
+    if q:
+        lista = lista.filter(Q(nombre__icontains=q) | Q(telefono__icontains=q) | Q(perros__nombre__icontains=q)).distinct()
+    return render(request, "hotel/clientes.html", {"clientes": lista, "q": q})
+
+
+def cliente_nuevo(request):
+    error, datos = None, request.POST
+    if request.method == "POST":
+        nombre, telefono = datos.get("nombre", "").strip(), datos.get("telefono", "").strip()
+        if not nombre or not telefono:
+            error = "Nombre y teléfono son obligatorios."
+        elif Cliente.objects.filter(telefono=telefono).exists():
+            error = "Ya existe un cliente con ese teléfono."
+        else:
+            c = Cliente.objects.create(nombre=nombre, telefono=telefono, correo=datos.get("correo", "").strip())
+            return redirect("cliente", cliente_id=c.pk)
+    return render(request, "hotel/cliente_nuevo.html", {"error": error, "datos": datos if request.method == "POST" else {}},
+                  status=400 if error else 200)
+
+
+def cliente(request, cliente_id):
+    c = get_object_or_404(Cliente.objects.prefetch_related("perros__vacunas"), pk=cliente_id)
+    hoy = timezone.localdate()
+    error = None
+    if request.method == "POST":
+        accion = request.POST.get("accion")
+        if accion == "perro":
+            nombre = request.POST.get("nombre", "").strip()
+            nac = _fecha(request.POST.get("nacimiento", ""))
+            if not nombre:
+                error = "Escriba el nombre del perro."
+            else:
+                Perro.objects.create(cliente=c, nombre=nombre[:80], raza=request.POST.get("raza", "").strip()[:80],
+                                     nacimiento=nac, notas=request.POST.get("notas", "").strip()[:300])
+                return redirect("cliente", cliente_id=c.pk)
+        elif accion == "vacuna":
+            perro = get_object_or_404(Perro, pk=request.POST.get("perro_id"), cliente=c)
+            tipo = request.POST.get("tipo")
+            aplicada, vence = _fecha(request.POST.get("aplicada", "")), _fecha(request.POST.get("vence", ""))
+            if tipo not in dict(Vacuna.TIPOS) or not aplicada or not vence:
+                error = "Indique tipo, fecha de aplicación y fecha de vencimiento."
+            elif vence < aplicada:
+                error = "El vencimiento no puede ser anterior a la aplicación."
+            else:
+                Vacuna.objects.create(perro=perro, tipo=tipo, aplicada=aplicada, vence=vence)
+                return redirect("cliente", cliente_id=c.pk)
+    perros = [{"perro": p, "requisitos": p.requisitos(hoy)} for p in c.perros.all()]
+    return render(request, "hotel/cliente.html",
+                  {"c": c, "perros": perros, "tipos": Vacuna.TIPOS, "error": error, "hoy": hoy},
+                  status=400 if error else 200)

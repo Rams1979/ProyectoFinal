@@ -1,0 +1,43 @@
+{% extends "hotel/base.html" %}
+{% block contenido %}
+  <h2>{{ c.nombre }}</h2>
+  <p>{{ c.telefono }}{% if c.correo %} · {{ c.correo }}{% endif %}</p>
+  {% if error %}<p class="error">{{ error }}</p>{% endif %}
+
+  {% for item in perros %}
+    <h3>{{ item.perro.nombre }}{% if item.perro.raza %} · {{ item.perro.raza }}{% endif %}</h3>
+    {% if item.perro.nacimiento %}<p>Nacimiento: {{ item.perro.nacimiento|date:"d/m/Y" }}</p>{% endif %}
+    {% if item.perro.notas %}<p>Cuidados: {{ item.perro.notas }}</p>{% endif %}
+    <table>
+      <tr><th>Requisito</th><th>Estado</th><th>Vence</th></tr>
+      {% for f in item.requisitos %}
+        <tr><td>{{ f.etiqueta }}</td>
+          <td>{% if f.estado == "vigente" %}Vigente{% elif f.estado == "vencida" %}Vencida{% else %}Sin registro{% endif %}</td>
+          <td>{{ f.vence|date:"d/m/Y"|default:"—" }}</td></tr>
+      {% endfor %}
+    </table>
+    <form class="filtros" method="post">
+      {% csrf_token %}
+      <input type="hidden" name="accion" value="vacuna">
+      <input type="hidden" name="perro_id" value="{{ item.perro.pk }}">
+      <label>Requisito <select name="tipo">{% for k, v in tipos %}<option value="{{ k }}">{{ v }}</option>{% endfor %}</select></label>
+      <label>Aplicada <input type="date" name="aplicada" required></label>
+      <label>Vence <input type="date" name="vence" required></label>
+      <button type="submit">Registrar</button>
+    </form>
+  {% empty %}
+    <p>Este cliente no tiene perros registrados.</p>
+  {% endfor %}
+
+  <h3>Agregar perro</h3>
+  <form class="filtros" method="post">
+    {% csrf_token %}
+    <input type="hidden" name="accion" value="perro">
+    <label>Nombre <input name="nombre" maxlength="80" required></label>
+    <label>Raza <input name="raza" maxlength="80"></label>
+    <label>Nacimiento <input type="date" name="nacimiento"></label>
+    <label>Cuidados (alimentación, medicación) <input name="notas" maxlength="300"></label>
+    <button type="submit">Agregar</button>
+  </form>
+  <p><a href="{% url 'clientes' %}">Volver a clientes</a></p>
+{% endblock %}

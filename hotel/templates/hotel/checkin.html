@@ -7,7 +7,16 @@
   {% if not bloqueado %}
   <form class="filtros" method="post">
     {% csrf_token %}
-    <label>Nombre del perro <input name="perro" maxlength="80" required></label>
+    {% if pendientes %}
+      <p class="error">Requisitos sanitarios pendientes para {{ reserva.perro }}:
+        {% for f in pendientes %}{{ f.etiqueta }} ({% if f.estado == "falta" %}sin registro{% else %}vencida {{ f.vence|date:"d/m/Y" }}{% endif %}){% if not forloop.last %}, {% endif %}{% endfor %}.</p>
+      <label><input type="checkbox" name="autoriza" value="1"> Recepción autoriza el ingreso</label>
+    {% endif %}
+    {% if reserva.perro %}
+      <p>Perro: <strong>{{ reserva.perro }}</strong></p>
+    {% else %}
+      <label>Nombre del perro <input name="perro" maxlength="80" required></label>
+    {% endif %}
     <button type="submit">Confirmar check-in</button>
   </form>
   {% endif %}

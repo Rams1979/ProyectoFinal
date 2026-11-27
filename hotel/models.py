@@ -14,6 +14,66 @@ class Habitacion(models.Model):
         return f"Habitación {self.numero:02d}"
 
 
+class Cliente(models.Model):
+    nombre = models.CharField(max_length=120)
+    telefono = models.CharField(max_length=30, unique=True)
+    correo = models.EmailField(blank=True)
+    creado = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["nombre"]
+
+    def __str__(self):
+        return self.nombre
+
+
+class Perro(models.Model):
+    cliente = models.ForeignKey(Cliente, on_delete=models.PROTECT, related_name="perros")
+    nombre = models.CharField(max_length=80)
+    raza = models.CharField(max_length=80, blank=True)
+    nacimiento = models.DateField(null=True, blank=True)
+    notas = models.CharField(max_length=300, blank=True)  # alimentación, medicación, cuidados
+
+    class Meta:
+        ordering = ["nombre"]
+        verbose_name_plural = "perros"
+
+    def __str__(self):
+        return self.nombre
+
+    def requisitos(self, fecha):
+        """Estado de cada requisito sanitario a la fecha dada: vigente, vencida o falta."""
+        ultimas = {}
+        for v in self.vacunas.all():
+            if v.tipo not in ultimas or v.vence > ultimas[v.tipo].vence:
+                ultimas[v.tipo] = v
+        filas = []
+        for tipo, etiqueta in Vacuna.TIPOS:
+            v = ultimas.get(tipo)
+            if v is None:
+                filas.append({"etiqueta": etiqueta, "estado": "falta", "vence": None})
+            else:
+                filas.append({"etiqueta": etiqueta, "estado": "vigente" if v.vence >= fecha else "vencida", "vence": v.vence})
+        return filas
+
+    def pendientes(self, fecha):
+        return [f for f in self.requisitos(fecha) if f["estado"] != "vigente"]
+
+
+class Vacuna(models.Model):
+    TIPOS = [
+        ("rabia", "Rabia"),
+        ("multiple", "Vacuna múltiple"),
+        ("bordetella", "Bordetella"),
+        ("desparasitacion", "Desparasitación interna"),
+        ("pulgas", "Pulgas y garrapatas"),
+    ]
+    perro = models.ForeignKey(Perro, on_delete=models.CASCADE, related_name="vacunas")
+    tipo = models.CharField(max_length=20, choices=TIPOS)
+    aplicada = models.DateField()
+    vence = models.DateField()
+
+
 class Reserva(models.Model):
     """Reserva confirmada automáticamente (el prototipo la da por pagada)."""
 
@@ -27,7 +87,9 @@ class Reserva(models.Model):
     salida = models.DateField()
     creada = models.DateTimeField(auto_now_add=True)
     estado = models.CharField(max_length=12, choices=ESTADOS, default=CONFIRMADA)
-    perro = models.CharField(max_length=80, blank=True)  # se pide en el check-in
+    cliente = models.ForeignKey(Cliente, null=True, blank=True, on_delete=models.PROTECT, related_name="reservas")
+    perro_ref = models.ForeignKey(Perro, null=True, blank=True, on_delete=models.PROTECT, related_name="reservas")
+    perro = models.CharField(max_length=80, blank=True)  # nombre; si no vino en la reserva se pide en el check-in
     checkin_en = models.DateTimeField(null=True, blank=True)
     checkout_en = models.DateTimeField(null=True, blank=True)
 

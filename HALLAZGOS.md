@@ -21,3 +21,5 @@ Se completan en `hotel/conocimiento.md`.
 - Dos reservas simultáneas de la misma habitación se evitan bloqueando la fila (PostgreSQL); en SQLite local no aplica el bloqueo.
 - No hay cancelación ni edición de reservas.
 - `limpiar_demo` borra las reservas y solicitudes de prueba antes de la demostración (`python manage.py limpiar_demo`).
+
+- Etapa 6: los requisitos sanitarios (5 tipos) son los del chat; la versión final del veterinario sigue POR DEFINIR. Sin adjuntar carné ni fotos. Clientes identificados solo por teléfono, sin edición ni borrado. Datos personales de clientes y perros quedan visibles sin inicio de sesión.

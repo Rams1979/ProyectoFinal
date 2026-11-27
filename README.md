@@ -7,6 +7,13 @@ Prototipo con datos de ejemplo (no es un sistema para operar el hotel). Django +
 - Check-in desde el panel (pide el nombre del perro); check-out cierra la estancia y deja la habitación en limpieza hasta marcarla disponible.
 - El check-out anticipado libera las fechas restantes. No se hace check-in antes de la fecha de entrada ni si la habitación está en limpieza.
 
+## Etapa 6: registro de clientes y perros
+- `/clientes/`: búsqueda por nombre, teléfono o perro; alta manual y ficha con sus perros.
+- Reservar crea o reutiliza al cliente (por teléfono) y al perro (por nombre) si se escribe; si no, el check-in lo pide y lo registra.
+- Requisitos sanitarios por perro (rabia, múltiple, Bordetella, desparasitación, pulgas y garrapatas) con fecha de vencimiento.
+- El check-in avisa si falta o venció algún requisito a la fecha de salida y exige marcar la autorización de recepción para continuar.
+- `limpiar_demo` también borra clientes, perros y vacunas.
+
 ## Etapa 3: chatbot sencillo
 - `/chat/`: responde con la información de `hotel/conocimiento.md`, consulta disponibilidad y toma nombre y teléfono para la persona de turno (`/solicitudes/`). No crea reservas.
 - Lo que dice POR DEFINIR en `conocimiento.md` el chat no lo inventa: lo deriva a la persona de turno. Al completar ese archivo el chat responde con los datos nuevos.

@@ -236,3 +236,55 @@ class OcupacionTests(TestCase):
         Reserva.objects.filter(pk=res.pk).update(estado="activa", perro="Max")
         self.assertContains(self.client.get("/panel/"), "Sale hoy")
         self.assertEqual(self.client.get(f"/checkout/{res.pk}/").status_code, 405)
+
+
+class ClientesTests(TestCase):
+    def setUp(self):
+        self.hoy = timezone.localdate()
+
+    def _reservar(self, perro="Rocky", tel="8888", hab=1):
+        d = {"entrada": str(self.hoy), "salida": str(self.hoy + timedelta(days=2)), "nombre": "Ana", "telefono": tel, "perro": perro}
+        return self.client.post(f"/reservar/{hab}/", d)
+
+    def test_reserva_registra_cliente_y_perro_sin_duplicar(self):
+        self._reservar()
+        self._reservar(tel="8888", hab=2)  # misma persona y mismo perro, otra habitación
+        from hotel.models import Cliente, Perro
+        self.assertEqual(Cliente.objects.count(), 1)
+        self.assertEqual(Perro.objects.count(), 1)
+        self.assertEqual(Reserva.objects.count(), 2)
+
+    def test_alta_cliente_perro_y_vacunas(self):
+        from hotel.models import Cliente
+        r = self.client.post("/clientes/nuevo/", {"nombre": "Luis", "telefono": "7777"})
+        self.assertEqual(r.status_code, 302)
+        self.assertEqual(self.client.post("/clientes/nuevo/", {"nombre": "X", "telefono": "7777"}).status_code, 400)
+        c = Cliente.objects.get(telefono="7777")
+        self.client.post(f"/clientes/{c.pk}/", {"accion": "perro", "nombre": "Luna"})
+        p = c.perros.get()
+        self.assertEqual(len(p.pendientes(self.hoy)), 5)
+        for tipo in ("rabia", "multiple", "bordetella", "desparasitacion", "pulgas"):
+            self.client.post(f"/clientes/{c.pk}/", {"accion": "vacuna", "perro_id": p.pk, "tipo": tipo,
+                             "aplicada": str(self.hoy - timedelta(days=30)), "vence": str(self.hoy + timedelta(days=300))})
+        self.assertEqual(p.pendientes(self.hoy), [])
+        self.assertEqual(p.pendientes(self.hoy + timedelta(days=400))[0]["estado"], "vencida")
+        malo = self.client.post(f"/clientes/{c.pk}/", {"accion": "vacuna", "perro_id": p.pk, "tipo": "rabia",
+                                "aplicada": str(self.hoy), "vence": str(self.hoy - timedelta(days=1))})
+        self.assertEqual(malo.status_code, 400)
+
+    def test_checkin_exige_autorizacion_si_faltan_requisitos(self):
+        self._reservar()
+        res = Reserva.objects.get()
+        self.assertContains(self.client.get(f"/checkin/{res.pk}/"), "Requisitos sanitarios pendientes")
+        self.assertEqual(self.client.post(f"/checkin/{res.pk}/", {}).status_code, 400)
+        self.assertEqual(self.client.post(f"/checkin/{res.pk}/", {"autoriza": "1"}).status_code, 302)
+        res.refresh_from_db()
+        self.assertEqual((res.estado, res.perro), ("activa", "Rocky"))
+
+    def test_checkin_sin_perro_en_reserva_lo_registra(self):
+        from hotel.models import Perro
+        self._reservar(perro="")
+        res = Reserva.objects.get()
+        self.assertEqual(self.client.post(f"/checkin/{res.pk}/", {"perro": "Max"}).status_code, 302)
+        self.assertEqual(Perro.objects.get().nombre, "Max")
+        self.assertContains(self.client.get("/clientes/?q=max"), "Ana")
