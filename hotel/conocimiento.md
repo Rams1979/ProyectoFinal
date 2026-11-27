@@ -51,6 +51,7 @@ Los requisitos específicos los establece el hotel con su veterinario (POR DEFIN
 
 ## Admisión
 - No se admiten perros peligrosos, como los de tipo Pitbull o de pelea.
+- Habitaciones: hay tres tamaños. Pequeña (1 m²), mediana (2 m²) y grande (4 m²). La disponibilidad indica cuántas hay libres de cada tamaño.
 - Cachorros, edad mínima, perros no castrados, hembras en celo, otras razas, restricciones de tamaño o peso y perros con tratamientos médicos: POR DEFINIR.
 
 ## Otras políticas POR DEFINIR

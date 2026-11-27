@@ -6,7 +6,7 @@ from django.db.models import Sum
 
 
 class Habitacion(models.Model):
-    TAMANOS = [("pequena", "Pequeña"), ("mediana", "Mediana"), ("grande", "Grande")]
+    TAMANOS = [("pequena", "Pequeña (1 m²)"), ("mediana", "Mediana (2 m²)"), ("grande", "Grande (4 m²)")]
     numero = models.PositiveSmallIntegerField(unique=True)
     tarifa_noche = models.DecimalField(max_digits=8, decimal_places=2, default=30)
     en_limpieza = models.BooleanField(default=False)

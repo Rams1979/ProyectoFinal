@@ -51,7 +51,7 @@ class DisponibilidadTests(TestCase):
         self.assertContains(r, "posterior")
         r = self.client.get("/disponibilidad/", {"entrada": d.isoformat(), "salida": (d + timedelta(days=2)).isoformat()})
         self.assertContains(r, "Habitaciones libres (30)")
-        self.assertContains(r, "Habitación 01 · Mediana · $60")
+        self.assertContains(r, "Habitación 01 · Mediana (2 m²) · $60")
 
 
 class ReservaTests(TestCase):
@@ -1231,7 +1231,7 @@ class TamanoHabitacionTests(TestCase):
         self.assertEqual(self.client.post("/habitaciones/", {"accion": "nueva", "numero": "31", "tarifa": "40", "tamano": "pequena"}).status_code, 302)
         self.assertEqual(Habitacion.objects.get(numero=31).tamano, "pequena")
         self.assertEqual(self.client.post("/habitaciones/", {"accion": "nueva", "numero": "32", "tarifa": "40", "tamano": "x"}).status_code, 400)
-        self.assertContains(self.client.get("/habitaciones/"), "Pequeña")
+        self.assertContains(self.client.get("/habitaciones/"), "Pequeña (1 m²)")
 
     def test_se_muestra_en_disponibilidad_y_panel_y_chat(self):
         from . import chat
@@ -1241,6 +1241,6 @@ class TamanoHabitacionTests(TestCase):
         s = e + timedelta(days=2)
         self.assertContains(self.client.get("/disponibilidad/", {"entrada": e.isoformat(), "salida": s.isoformat()}), "Grande")
         r = chat.consultar_disponibilidad(e.isoformat(), s.isoformat())
-        self.assertEqual(r["libres_por_tamano"], {"Grande": 1, "Mediana": 29})
+        self.assertEqual(r["libres_por_tamano"], {"Grande (4 m²)": 1, "Mediana (2 m²)": 29})
         entrar(self.client, "Administrador")
         self.assertContains(self.client.get("/panel/"), "Grande")
