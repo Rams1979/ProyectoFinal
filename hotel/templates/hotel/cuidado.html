@@ -6,7 +6,7 @@
     <div class="aviso">
       <strong>Alertas para el encargado ({{ alertas.total }})</strong>
       <ul>
-        {% for r in alertas.sin_comer %}<li>{{ r.habitacion }} · {{ r.mascotas_texto }}: lleva 2 días seguidos sin comer.</li>{% endfor %}
+        {% for r in alertas.sin_comer %}<li>{{ r.habitacion }} · {{ r.mascotas_texto|capfirst }}: lleva 2 días seguidos sin comer.</li>{% endfor %}
         {% for r, i in alertas.sin_servir %}<li>{{ r.habitacion }} · {{ i.hora|time:"h:i A" }}: toma sin servir ({{ i.detalle }}).</li>{% endfor %}
         {% for r, i in alertas.sin_verificar %}<li>{{ r.habitacion }} · {{ i.hora|time:"h:i A" }}: falta verificar cuánto comió.</li>{% endfor %}
         {% for r, i in alertas.medicinas %}<li>{{ r.habitacion }} · {{ i.hora|time:"h:i A" }}: medicina sin registrar ({{ i.detalle }}).</li>{% endfor %}
@@ -14,7 +14,7 @@
     </div>
   {% endif %}
   {% for f in filas %}
-    <h3>{{ f.reserva.habitacion }} · {{ f.reserva.mascotas_texto }} <small>({{ f.reserva.nombre }})</small>
+    <h3>{{ f.reserva.habitacion }} · {{ f.reserva.mascotas_texto|capfirst }} <small>({{ f.reserva.nombre }})</small>
       {% if f.reserva.perro_ref %}<small><a href="{% url 'perro' f.reserva.perro_ref.pk %}">Ficha</a></small>{% endif %}
       {% if f.reserva.perro2_ref %}<small><a href="{% url 'perro' f.reserva.perro2_ref.pk %}">Ficha 2</a></small>{% endif %}</h3>
     {% for nombre, nota in f.notas %}<p class="aviso"><strong>{{ nombre }}:</strong> {{ nota }}</p>{% endfor %}
