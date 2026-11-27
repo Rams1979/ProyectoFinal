@@ -18,31 +18,34 @@ from django.views.decorators.http import require_POST
 from .chat import responder as chat_responder
 from . import acceso
 from .disponibilidad import habitaciones_libres
-from .permisos import ADMIN, RECEPCION, ROLES, personal, rol, solo_admin
-from .models import Cliente, Habitacion, ItemPlan, Pago, Perro, Reserva, SolicitudContacto, Tarea, Vacuna
+from .permisos import con_area, es_administrador, personal, puede, rol
+from .models import (AREAS, Articulo, BloqueoHabitacion, Cliente, Habitacion, ItemPlan, Pago, Perfil, PerfilUsuario,
+                     Perro, Reserva, SolicitudContacto, Tarea, Vacuna)
 
 
 def inicio(request):
-    """Visitante: página pública. Personal: menú principal según su rol."""
-    mi_rol = rol(request.user)
-    if mi_rol is None:
+    """Visitante: página pública. Personal: menú con las pantallas de su perfil."""
+    if rol(request.user) is None:
         return render(request, "hotel/publica.html")
     hoy = timezone.localdate()
     ocupadas = Reserva.objects.filter(estado=Reserva.ACTIVA).count()
     llegan = Reserva.objects.filter(estado=Reserva.CONFIRMADA, entrada=hoy).count()
-    menu = [
-        ("panel", "Panel de ocupación", f"{ocupadas} ocupadas · {llegan} llegan hoy", "Estado de las habitaciones hoy, check-in y check-out."),
-        ("disponibilidad", "Disponibilidad", "Buscar por fechas", "Habitaciones libres y reserva."),
-        ("reservaciones", "Reservaciones", f"{Reserva.objects.exclude(estado__in=[Reserva.CERRADA, Reserva.CANCELADA]).count()} vigentes", "Lista de reservas con su estado."),
-        ("cuidado", "Cuidado diario", f"{_pendientes_cuidado(hoy)} tareas pendientes hoy", "Alimentación, medicación, paseos y limpieza por perro."),
-        ("caja", "Caja del día", "Pagos y devoluciones", "Cobros por método de pago."),
-        ("clientes", "Clientes y perros", f"{Cliente.objects.count()} clientes", "Fichas, perros y requisitos sanitarios."),
-        ("chat", "Chat", "Asistente del hotel", "Preguntas frecuentes y disponibilidad."),
-        ("habitaciones", "Habitaciones", f"{Habitacion.objects.count()} habitaciones", "Lista y tarifa por noche."),
+    vigentes = Reserva.objects.exclude(estado__in=[Reserva.CERRADA, Reserva.CANCELADA]).count()
+    todas = [  # (área que se exige, url, título, dato, descripción)
+        ("panel", "panel", "Panel de ocupación", f"{ocupadas} ocupadas · {llegan} llegan hoy", "Estado de las habitaciones hoy, check-in y check-out."),
+        (None, "disponibilidad", "Disponibilidad", "Buscar por fechas", "Habitaciones libres y reserva."),
+        ("reservas", "reservaciones", "Reservaciones", f"{vigentes} vigentes", "Lista de reservas; editar y cancelar."),
+        ("cuidado", "cuidado", "Cuidado diario", f"{_pendientes_cuidado(hoy)} tareas pendientes hoy", "Alimentación, medicación, paseos y limpieza por perro."),
+        ("caja", "caja", "Caja del día", "Pagos y devoluciones", "Cobros por método de pago."),
+        ("clientes", "clientes", "Clientes y perros", f"{Cliente.objects.count()} clientes", "Fichas, perros y requisitos sanitarios."),
+        (None, "chat", "Chat", "Asistente del hotel", "Preguntas frecuentes y disponibilidad."),
+        ("habitaciones", "habitaciones", "Habitaciones y tarifas", f"{Habitacion.objects.filter(activa=True).count()} activas", "Tarifa por noche, mantenimiento y altas."),
+        ("habitaciones", "articulos", "Artículos y precios", f"{Articulo.objects.filter(activo=True).count()} activos", "Lista de precios de servicios y productos."),
+        ("solicitudes", "solicitudes", "Solicitudes de contacto", f"{SolicitudContacto.objects.count()} recibidas", "Datos que dejaron clientes en el chat."),
+        ("usuarios", "usuarios", "Usuarios", f"{User.objects.filter(is_active=True).count()} activos", "Crear, editar y desactivar usuarios."),
+        ("usuarios", "perfiles", "Perfiles", f"{Perfil.objects.count()} perfiles", "Qué pantallas ve cada perfil."),
     ]
-    if mi_rol == ADMIN:
-        menu.insert(5, ("solicitudes", "Solicitudes de contacto", f"{SolicitudContacto.objects.count()} recibidas", "Datos que dejaron clientes en el chat."))
-        menu.append(("usuarios", "Usuarios", f"{User.objects.filter(is_active=True).count()} activos", "Crear y desactivar usuarios del personal."))
+    menu = [(url, titulo, dato, desc) for area, url, titulo, dato, desc in todas if area is None or puede(request.user, area)]
     return render(request, "hotel/inicio.html", {"menu": menu, "hoy": hoy})
 
 
@@ -50,11 +53,6 @@ def _pendientes_cuidado(hoy):
     total = ItemPlan.objects.filter(reserva__estado=Reserva.ACTIVA).count()
     hechas = Tarea.objects.filter(fecha=hoy, hecha=True, item__reserva__estado=Reserva.ACTIVA).count()
     return total - hechas
-
-
-@personal
-def habitaciones(request):
-    return render(request, "hotel/habitaciones.html", {"habitaciones": Habitacion.objects.all()})
 
 
 def _fecha(texto):
@@ -162,7 +160,7 @@ def reserva_confirmada(request, reserva_id):
                    "anticipo_pct": settings.ANTICIPO_PORCENTAJE})
 
 
-@personal
+@con_area("reservas")
 def reservaciones(request):
     hoy = timezone.localdate()
     filas = [(r, r.noches, r.total) for r in Reserva.objects.select_related("habitacion", "creada_por", "checkin_por", "checkout_por", "cancelada_por")]
@@ -184,7 +182,7 @@ def chat_mensaje(request):
     return JsonResponse({"respuesta": chat_responder(historial)})
 
 
-@solo_admin
+@con_area("solicitudes")
 def solicitudes(request):
     return render(request, "hotel/solicitudes.html", {"solicitudes": SolicitudContacto.objects.all()})
 
@@ -195,8 +193,9 @@ def _estado_habitaciones(hoy):
     pendientes = {}
     for r in Reserva.objects.filter(estado=Reserva.CONFIRMADA, entrada__lte=hoy, salida__gt=hoy):
         pendientes.setdefault(r.habitacion_id, r)
+    en_mant = {b.habitacion_id: b for b in BloqueoHabitacion.objects.filter(desde__lte=hoy, hasta__gte=hoy)}
     filas = []
-    for h in Habitacion.objects.all():
+    for h in Habitacion.objects.filter(activa=True):
         if h.pk in activas:
             r = activas[h.pk]
             etiqueta = "Sale hoy" if r.salida <= hoy else "Ocupada"
@@ -205,6 +204,8 @@ def _estado_habitaciones(hoy):
             r = pendientes[h.pk]
             etiqueta = "Llega hoy" if r.entrada == hoy else "Pendiente de check-in"
             filas.append({"hab": h, "clave": "llega", "etiqueta": etiqueta, "reserva": r})
+        elif h.pk in en_mant:
+            filas.append({"hab": h, "clave": "mantenimiento", "etiqueta": f"En mantenimiento hasta el {en_mant[h.pk].hasta:%d/%m}"})
         elif h.en_limpieza:
             filas.append({"hab": h, "clave": "limpieza", "etiqueta": "En limpieza"})
         else:
@@ -212,16 +213,16 @@ def _estado_habitaciones(hoy):
     return filas
 
 
-@personal
+@con_area("panel")
 def panel(request):
     hoy = timezone.localdate()
     filas = _estado_habitaciones(hoy)
-    cuenta = {k: sum(1 for f in filas if f["clave"] == k) for k in ("ocupada", "llega", "limpieza", "libre")}
+    cuenta = {k: sum(1 for f in filas if f["clave"] == k) for k in ("ocupada", "llega", "mantenimiento", "limpieza", "libre")}
     cuenta["sale_hoy"] = sum(1 for f in filas if f.get("sale_hoy"))
     return render(request, "hotel/panel.html", {"filas": filas, "cuenta": cuenta, "hoy": hoy})
 
 
-@personal
+@con_area("panel")
 def checkin(request, reserva_id):
     hoy = timezone.localdate()
     with transaction.atomic():
@@ -234,6 +235,8 @@ def checkin(request, reserva_id):
             error = f"La entrada es el {reserva.entrada:%d/%m/%Y}; todavía no se puede hacer el check-in."
         elif reserva.salida <= hoy:
             error = "La fecha de salida de esta reserva ya pasó."
+        elif BloqueoHabitacion.objects.filter(habitacion=reserva.habitacion, desde__lte=hoy, hasta__gte=hoy).exists():
+            error = "La habitación está en mantenimiento hoy."
         elif reserva.habitacion.en_limpieza:
             error = "La habitación está en limpieza. Márquela como disponible en el panel."
         elif Reserva.objects.filter(habitacion=reserva.habitacion, estado=Reserva.ACTIVA).exists():
@@ -274,7 +277,7 @@ def checkin(request, reserva_id):
     return render(request, "hotel/checkin.html", contexto)
 
 
-@personal
+@con_area("panel")
 @require_POST
 def checkout(request, reserva_id):
     hoy = timezone.localdate()
@@ -292,14 +295,14 @@ def checkout(request, reserva_id):
     return redirect("panel")
 
 
-@personal
+@con_area("panel")
 @require_POST
 def limpieza_lista(request, habitacion_id):
     Habitacion.objects.filter(pk=habitacion_id).update(en_limpieza=False)
     return redirect("panel")
 
 
-@personal
+@con_area("clientes")
 def clientes(request):
     q = request.GET.get("q", "").strip()
     lista = Cliente.objects.prefetch_related("perros")
@@ -308,7 +311,7 @@ def clientes(request):
     return render(request, "hotel/clientes.html", {"clientes": lista, "q": q})
 
 
-@personal
+@con_area("clientes")
 def cliente_nuevo(request):
     error, datos = None, request.POST
     if request.method == "POST":
@@ -324,7 +327,7 @@ def cliente_nuevo(request):
                   status=400 if error else 200)
 
 
-@personal
+@con_area("clientes")
 def cliente(request, cliente_id):
     c = get_object_or_404(Cliente.objects.prefetch_related("perros__vacunas"), pk=cliente_id)
     hoy = timezone.localdate()
@@ -388,13 +391,12 @@ def logout_vista(request):
 
 def _admins_activos_sin(pk):
     """Administradores activos distintos del usuario dado (para no quedarse sin ninguno)."""
-    return sum(1 for u in User.objects.filter(is_active=True).exclude(pk=pk) if rol(u) == ADMIN)
+    return sum(1 for u in User.objects.filter(is_active=True).exclude(pk=pk) if es_administrador(u))
 
 
 def _poner_perfil(u, perfil):
-    u.groups.clear()
-    u.groups.add(Group.objects.get_or_create(name=perfil)[0])
-    if perfil != ADMIN and u.is_superuser:  # un superusuario sería administrador sin importar el perfil
+    PerfilUsuario.objects.update_or_create(usuario=u, defaults={"perfil": perfil})
+    if not perfil.es_sistema and u.is_superuser:  # un superusuario sería administrador sin importar el perfil
         u.is_superuser = False
         u.save(update_fields=["is_superuser"])
 
@@ -407,14 +409,15 @@ def _error_clave(clave):
     return None
 
 
-@solo_admin
+@con_area("usuarios")
 def usuarios(request):
     """Lista de usuarios y alta de uno nuevo: usuario, nombre, contraseña y perfil."""
     error, datos = None, request.POST if request.method == "POST" else {}
+    perfiles = list(Perfil.objects.all())
     if request.method == "POST":
         usuario, nombre = datos.get("username", "").strip(), datos.get("nombre", "").strip()[:150]
-        perfil, clave = datos.get("rol"), datos.get("password", "")
-        if not usuario or not nombre or perfil not in ROLES:
+        perfil, clave = Perfil.objects.filter(nombre=datos.get("rol")).first(), datos.get("password", "")
+        if not usuario or not nombre or perfil is None:
             error = "Indique usuario, nombre y perfil."
         elif User.objects.filter(username__iexact=usuario).exists():
             error = "Ese usuario ya existe."
@@ -425,24 +428,25 @@ def usuarios(request):
             _poner_perfil(u, perfil)
             return redirect("usuarios")
     filas = [{"u": u, "rol": rol(u) or "Sin perfil"} for u in User.objects.order_by("username")]
-    return render(request, "hotel/usuarios.html", {"filas": filas, "roles": ROLES, "error": error, "datos": datos},
+    return render(request, "hotel/usuarios.html", {"filas": filas, "roles": perfiles, "error": error, "datos": datos},
                   status=400 if error else 200)
 
 
-@solo_admin
+@con_area("usuarios")
 def usuario_editar(request, usuario_id):
     u = get_object_or_404(User, pk=usuario_id)
     propio = u.pk == request.user.pk
     error, datos = None, request.POST if request.method == "POST" else {}
     if request.method == "POST":
-        nombre, perfil = datos.get("nombre", "").strip()[:150], datos.get("rol")
+        nombre = datos.get("nombre", "").strip()[:150]
+        perfil = Perfil.objects.filter(nombre=datos.get("rol")).first()
         activo = True if propio else datos.get("activo") == "1"
         clave = datos.get("password", "")
-        if not nombre or perfil not in ROLES:
+        if not nombre or perfil is None:
             error = "Indique nombre y perfil."
-        elif propio and perfil != rol(u):
+        elif propio and perfil.nombre != rol(u):
             error = "No puede cambiar su propio perfil."
-        elif (not activo or perfil != ADMIN) and rol(u) == ADMIN and u.is_active and _admins_activos_sin(u.pk) == 0:
+        elif (not activo or not perfil.es_sistema) and es_administrador(u) and u.is_active and _admins_activos_sin(u.pk) == 0:
             error = "Debe quedar al menos un administrador activo."
         elif clave:
             error = _error_clave(clave)
@@ -454,20 +458,78 @@ def usuario_editar(request, usuario_id):
             if not propio:
                 _poner_perfil(u, perfil)
             return redirect("usuarios")
-    return render(request, "hotel/usuario_editar.html", {"u": u, "propio": propio, "perfil": rol(u), "roles": ROLES,
-                  "error": error, "datos": datos}, status=400 if error else 200)
+    return render(request, "hotel/usuario_editar.html", {"u": u, "propio": propio, "perfil": rol(u),
+                  "roles": Perfil.objects.all(), "error": error, "datos": datos}, status=400 if error else 200)
 
 
-@solo_admin
+@con_area("usuarios")
 @require_POST
 def usuario_activo(request, usuario_id):
     u = get_object_or_404(User, pk=usuario_id)
     if u.pk != request.user.pk:  # nadie se desactiva a sí mismo
-        if u.is_active and rol(u) == ADMIN and _admins_activos_sin(u.pk) == 0:
+        if u.is_active and es_administrador(u) and _admins_activos_sin(u.pk) == 0:
             return redirect("usuarios")
         u.is_active = not u.is_active
         u.save(update_fields=["is_active"])
     return redirect("usuarios")
+
+
+def _areas_validas(valores):
+    permitidas = {a for a, _ in AREAS}
+    return [a for a, _ in AREAS if a in valores and a in permitidas]
+
+
+@con_area("usuarios")
+def perfiles(request):
+    error, datos = None, request.POST if request.method == "POST" else {}
+    if request.method == "POST":
+        nombre = datos.get("nombre", "").strip()[:60]
+        areas = _areas_validas(datos.getlist("areas"))
+        if not nombre:
+            error = "Escriba el nombre del perfil."
+        elif Perfil.objects.filter(nombre__iexact=nombre).exists():
+            error = "Ya existe un perfil con ese nombre."
+        elif not areas:
+            error = "Marque al menos una pantalla."
+        if not error:
+            Perfil.objects.create(nombre=nombre, areas=areas)
+            return redirect("perfiles")
+    lista = [{"p": p, "usuarios": p.usuarios.count()} for p in Perfil.objects.all()]
+    return render(request, "hotel/perfiles.html", {"lista": lista, "areas": AREAS, "error": error, "datos": datos},
+                  status=400 if error else 200)
+
+
+@con_area("usuarios")
+def perfil_editar(request, perfil_id):
+    p = get_object_or_404(Perfil, pk=perfil_id)
+    if p.es_sistema:
+        return render(request, "hotel/perfil_editar.html", {"p": p, "areas": AREAS, "bloqueado": True,
+                      "error": "El perfil Administrador siempre tiene todas las pantallas y no se edita."}, status=409)
+    error, datos = None, request.POST if request.method == "POST" else {}
+    if request.method == "POST":
+        nombre, areas = datos.get("nombre", "").strip()[:60], _areas_validas(datos.getlist("areas"))
+        if not nombre:
+            error = "Escriba el nombre del perfil."
+        elif Perfil.objects.filter(nombre__iexact=nombre).exclude(pk=p.pk).exists():
+            error = "Ya existe un perfil con ese nombre."
+        elif not areas:
+            error = "Marque al menos una pantalla."
+        if not error:
+            p.nombre, p.areas = nombre, areas
+            p.save()
+            return redirect("perfiles")
+    marcadas = _areas_validas(datos.getlist("areas")) if datos else p.areas
+    return render(request, "hotel/perfil_editar.html", {"p": p, "areas": AREAS, "marcadas": marcadas,
+                  "usuarios": p.usuarios.count(), "error": error, "datos": datos}, status=400 if error else 200)
+
+
+@con_area("usuarios")
+@require_POST
+def perfil_borrar(request, perfil_id):
+    p = get_object_or_404(Perfil, pk=perfil_id)
+    if not p.es_sistema and not p.usuarios.exists():
+        p.delete()
+    return redirect("perfiles")
 
 
 @personal
@@ -492,7 +554,7 @@ def cambiar_clave(request):
 
 def _puede_gestionar(request, reserva_id):
     """Personal siempre; un visitante solo sobre las reservas que hizo en su sesión."""
-    return rol(request.user) is not None or reserva_id in request.session.get("reservas_propias", [])
+    return puede(request.user, "reservas") or reserva_id in request.session.get("reservas_propias", [])
 
 
 @require_POST
@@ -512,7 +574,7 @@ def cancelar(request, reserva_id):
     return redirect("reserva_confirmada", reserva_id=reserva.pk)
 
 
-@personal
+@con_area("reservas")
 def editar_reserva(request, reserva_id):
     hoy = timezone.localdate()
     with transaction.atomic():
@@ -548,6 +610,8 @@ def editar_reserva(request, reserva_id):
             if error:
                 contexto.update(error=error, datos=d, libres=_libres_para_editar(reserva, nueva_entrada, nueva_salida))
                 return render(request, "hotel/editar.html", contexto, status=409 if "libre" in error else 400)
+            if habitacion.pk != reserva.habitacion_id:
+                reserva.tarifa_noche = habitacion.tarifa_noche  # otra habitación: rige su tarifa vigente
             reserva.habitacion, reserva.entrada, reserva.salida = habitacion, nueva_entrada, nueva_salida
             reserva.nombre, reserva.telefono = nombre, telefono
             if perro2 != reserva.perro2 and not solo_salida:
@@ -609,7 +673,7 @@ def _tareas_de_hoy(hoy):
     return filas
 
 
-@personal
+@con_area("cuidado")
 def cuidado(request):
     hoy = timezone.localdate()
     filas = _tareas_de_hoy(hoy)
@@ -617,7 +681,7 @@ def cuidado(request):
                                                   "pendientes": sum(f["pendientes"] for f in filas)})
 
 
-@personal
+@con_area("cuidado")
 @require_POST
 def tarea_hecha(request, tarea_id):
     with transaction.atomic():
@@ -628,7 +692,7 @@ def tarea_hecha(request, tarea_id):
     return redirect("cuidado")
 
 
-@personal
+@con_area("cuidado")
 def plan_reserva(request, reserva_id):
     reserva = get_object_or_404(Reserva.objects.select_related("habitacion"), pk=reserva_id)
     error = None
@@ -665,7 +729,7 @@ def _monto(texto):
     return m if m > 0 else None
 
 
-@personal
+@con_area("caja")
 def pagos_reserva(request, reserva_id):
     error = None
     with transaction.atomic():
@@ -691,7 +755,7 @@ def pagos_reserva(request, reserva_id):
         "anticipo_pct": settings.ANTICIPO_PORCENTAJE}, status=400 if error else 200)
 
 
-@personal
+@con_area("caja")
 def caja(request):
     dia = _fecha(request.GET.get("dia", "")) or timezone.localdate()
     pagos = Pago.objects.filter(creado__date=dia).select_related("reserva__habitacion", "registrado_por").order_by("creado")
@@ -702,3 +766,143 @@ def caja(request):
         resumen.append({"etiqueta": etiqueta, "cobrado": cobrado, "devuelto": devuelto, "neto": cobrado - devuelto})
     return render(request, "hotel/caja.html", {"dia": dia, "pagos": pagos, "resumen": resumen,
                   "neto_total": sum((r["neto"] for r in resumen), Decimal("0"))})
+
+
+# ---------------------------------------------------------------- habitaciones y tarifas
+def _decimal(texto, permitir_vacio=False):
+    """Devuelve (valor, valido). Vacío es válido (None) solo si se permite."""
+    texto = (texto or "").strip()
+    if not texto:
+        return None, permitir_vacio
+    try:
+        v = Decimal(texto.replace(",", ".")).quantize(Decimal("0.01"))
+    except InvalidOperation:
+        return None, False
+    return (v, True) if v >= 0 else (None, False)
+
+
+@con_area("habitaciones")
+def habitaciones(request):
+    hoy = timezone.localdate()
+    error, datos = None, request.POST if request.method == "POST" else {}
+    if request.method == "POST":
+        accion = datos.get("accion")
+        tarifa, ok = _decimal(datos.get("tarifa"))
+        if accion == "nueva":
+            numero = datos.get("numero", "").strip()
+            if not numero.isdigit() or not 0 < int(numero) < 1000:
+                error = "Escriba un número de habitación válido."
+            elif Habitacion.objects.filter(numero=int(numero)).exists():
+                error = "Ya existe esa habitación."
+            elif not ok or not tarifa:
+                error = "Escriba una tarifa mayor que cero."
+            else:
+                Habitacion.objects.create(numero=int(numero), tarifa_noche=tarifa)
+                return redirect("habitaciones")
+        elif accion == "tarifa_todas":
+            if not ok or not tarifa:
+                error = "Escriba una tarifa mayor que cero."
+            else:
+                Habitacion.objects.filter(activa=True).update(tarifa_noche=tarifa)
+                return redirect("habitaciones")
+    filas = []
+    for h in Habitacion.objects.prefetch_related("bloqueos"):
+        proximos = [b for b in h.bloqueos.all() if b.hasta >= hoy]
+        filas.append({"h": h, "mantenimiento": next((b for b in proximos if b.desde <= hoy), None), "proximo": proximos[:1] and proximos[0]})
+    return render(request, "hotel/habitaciones.html", {"filas": filas, "error": error, "datos": datos},
+                  status=400 if error else 200)
+
+
+@con_area("habitaciones")
+def habitacion_editar(request, habitacion_id):
+    hoy = timezone.localdate()
+    error, datos, conflicto = None, request.POST if request.method == "POST" else {}, False
+    with transaction.atomic():
+        h = get_object_or_404(Habitacion.objects.select_for_update(), pk=habitacion_id)
+        if request.method == "POST":
+            accion = datos.get("accion")
+            if accion == "guardar":
+                tarifa, ok = _decimal(datos.get("tarifa"))
+                activa = datos.get("activa") == "1"
+                vigentes = Reserva.objects.filter(habitacion=h, estado__in=[Reserva.CONFIRMADA, Reserva.ACTIVA], salida__gt=hoy).count()
+                if not ok or not tarifa:
+                    error = "Escriba una tarifa mayor que cero."
+                elif not activa and vigentes:
+                    error, conflicto = f"No se puede desactivar: tiene {vigentes} reserva(s) vigente(s). Cancélelas o muévalas primero.", True
+                else:
+                    h.tarifa_noche, h.activa, h.nota = tarifa, activa, datos.get("nota", "").strip()[:200]
+                    h.save()
+                    return redirect("habitaciones")
+            elif accion == "bloqueo":
+                desde, hasta = _fecha(datos.get("desde", "")), _fecha(datos.get("hasta", ""))
+                if not desde or not hasta or hasta < desde:
+                    error = "Indique las fechas: el fin no puede ser anterior al inicio."
+                elif hasta < hoy:
+                    error = "El mantenimiento no puede terminar en el pasado."
+                else:
+                    choques = Reserva.objects.filter(habitacion=h, entrada__lte=hasta, salida__gt=desde,
+                                                     estado__in=[Reserva.CONFIRMADA, Reserva.ACTIVA]).count()
+                    if choques:
+                        error, conflicto = f"Hay {choques} reserva(s) en esas fechas. Cancélelas o muévalas antes de bloquear.", True
+                    else:
+                        BloqueoHabitacion.objects.create(habitacion=h, desde=desde, hasta=hasta,
+                                                         motivo=datos.get("motivo", "").strip()[:200])
+                        return redirect("habitacion_editar", habitacion_id=h.pk)
+            elif accion == "quitar_bloqueo":
+                BloqueoHabitacion.objects.filter(pk=datos.get("bloqueo_id"), habitacion=h).delete()
+                return redirect("habitacion_editar", habitacion_id=h.pk)
+    return render(request, "hotel/habitacion_editar.html", {"h": h, "bloqueos": h.bloqueos.filter(hasta__gte=hoy),
+                  "error": error, "datos": datos, "hoy": hoy}, status=(409 if conflicto else 400) if error else 200)
+
+
+# ---------------------------------------------------------------- maestro de artículos (lista de precios)
+def _codigo_nuevo():
+    n = Articulo.objects.count() + 1
+    while Articulo.objects.filter(codigo=f"ART-{n:04d}").exists():
+        n += 1
+    return f"ART-{n:04d}"
+
+
+@con_area("habitaciones")
+def articulos(request):
+    error, datos = None, request.POST if request.method == "POST" else {}
+    if request.method == "POST":
+        nombre, tipo = datos.get("nombre", "").strip()[:120], datos.get("tipo")
+        precio, ok = _decimal(datos.get("precio"), permitir_vacio=True)
+        codigo = datos.get("codigo", "").strip()[:20] or _codigo_nuevo()
+        if not nombre or tipo not in dict(Articulo.TIPOS):
+            error = "Indique nombre y tipo."
+        elif not ok:
+            error = "El precio no es válido (déjelo vacío si está por definir)."
+        elif Articulo.objects.filter(codigo__iexact=codigo).exists():
+            error = "Ya existe un artículo con ese código."
+        else:
+            Articulo.objects.create(codigo=codigo, nombre=nombre, tipo=tipo, precio=precio,
+                                    descripcion=datos.get("descripcion", "").strip()[:200], unidad=datos.get("unidad", "").strip()[:30])
+            return redirect("articulos")
+    return render(request, "hotel/articulos.html", {"lista": Articulo.objects.all(), "tipos": Articulo.TIPOS,
+                  "error": error, "datos": datos}, status=400 if error else 200)
+
+
+@con_area("habitaciones")
+def articulo_editar(request, articulo_id):
+    a = get_object_or_404(Articulo, pk=articulo_id)
+    error, datos = None, request.POST if request.method == "POST" else {}
+    if request.method == "POST":
+        nombre, tipo = datos.get("nombre", "").strip()[:120], datos.get("tipo")
+        precio, ok = _decimal(datos.get("precio"), permitir_vacio=True)
+        codigo = datos.get("codigo", "").strip()[:20]
+        if not nombre or tipo not in dict(Articulo.TIPOS) or not codigo:
+            error = "Indique código, nombre y tipo."
+        elif not ok:
+            error = "El precio no es válido (déjelo vacío si está por definir)."
+        elif Articulo.objects.filter(codigo__iexact=codigo).exclude(pk=a.pk).exists():
+            error = "Ya existe un artículo con ese código."
+        else:
+            a.codigo, a.nombre, a.tipo, a.precio = codigo, nombre, tipo, precio
+            a.descripcion, a.unidad = datos.get("descripcion", "").strip()[:200], datos.get("unidad", "").strip()[:30]
+            a.activo = datos.get("activo") == "1"
+            a.save()
+            return redirect("articulos")
+    return render(request, "hotel/articulo_editar.html", {"a": a, "tipos": Articulo.TIPOS, "error": error, "datos": datos},
+                  status=400 if error else 200)

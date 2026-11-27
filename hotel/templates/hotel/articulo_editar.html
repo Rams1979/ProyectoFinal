@@ -1,0 +1,17 @@
+{% extends "hotel/base.html" %}
+{% block contenido %}
+  <h2>Editar artículo · {{ a.codigo }}</h2>
+  {% if error %}<p class="error">{{ error }}</p>{% endif %}
+  <form class="filtros" method="post">
+    {% csrf_token %}
+    <label>Código <input name="codigo" maxlength="20" value="{{ datos.codigo|default:a.codigo }}" required></label>
+    <label>Nombre <input name="nombre" maxlength="120" value="{{ datos.nombre|default:a.nombre }}" required></label>
+    <label>Tipo <select name="tipo">{% for k, v in tipos %}<option value="{{ k }}" {% if k == a.tipo %}selected{% endif %}>{{ v }}</option>{% endfor %}</select></label>
+    <label>Precio (USD, vacío si está por definir) <input name="precio" inputmode="decimal" value="{% if datos %}{{ datos.precio }}{% elif a.precio is not None %}{{ a.precio }}{% endif %}"></label>
+    <label>Unidad <input name="unidad" maxlength="30" value="{{ datos.unidad|default:a.unidad }}"></label>
+    <label>Descripción <input name="descripcion" maxlength="200" value="{{ datos.descripcion|default:a.descripcion }}"></label>
+    <label><input type="checkbox" name="activo" value="1" {% if a.activo %}checked{% endif %}> Artículo activo</label>
+    <button type="submit">Guardar</button>
+  </form>
+  <p><a href="{% url 'articulos' %}">Volver a artículos</a></p>
+{% endblock %}

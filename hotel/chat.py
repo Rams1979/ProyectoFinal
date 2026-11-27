@@ -7,7 +7,7 @@ from pathlib import Path
 from django.utils import timezone
 
 from .disponibilidad import habitaciones_libres
-from .models import Habitacion, SolicitudContacto
+from .models import Articulo, Habitacion, SolicitudContacto
 
 MODELO = os.environ.get("CHAT_MODEL", "claude-sonnet-5-5")
 CONOCIMIENTO = (Path(__file__).parent / "conocimiento.md").read_text(encoding="utf-8")
@@ -30,7 +30,10 @@ REGLAS
 - No des consejos veterinarios; ante una emergencia o enfermedad, deriva a la persona de turno.
 
 INFORMACIÓN DEL HOTEL
-{CONOCIMIENTO}"""
+{CONOCIMIENTO}
+
+PRECIOS VIGENTES (del sistema, tienen prioridad sobre cualquier otro dato)
+{{precios}}"""
 
 HERRAMIENTAS = [
     {
@@ -71,14 +74,15 @@ def consultar_disponibilidad(entrada: str, salida: str) -> dict:
     if s <= e:
         return {"error": "La salida debe ser posterior a la entrada."}
     noches = (s - e).days
-    libres = habitaciones_libres(e, s).count()
-    tarifa = Habitacion.objects.values_list("tarifa_noche", flat=True).first() or 0
+    disponibles = habitaciones_libres(e, s)
+    libres = disponibles.count()
+    tarifa = disponibles.order_by("tarifa_noche").values_list("tarifa_noche", flat=True).first() or 0  # la más baja entre las libres
     return {
         "habitaciones_libres": libres,
         "noches": noches,
         "tarifa_noche_usd": float(tarifa),
         "total_por_habitacion_usd": float(tarifa * noches),
-        "nota": "Es una consulta, no una reserva. Se reserva en /disponibilidad/.",
+        "nota": "La tarifa indicada es la más baja entre las habitaciones libres. Es una consulta, no una reserva. Se reserva en /disponibilidad/.",
     }
 
 
@@ -96,6 +100,22 @@ def _ejecutar(nombre, datos):
     if nombre == "registrar_contacto":
         return registrar_contacto(datos.get("nombre"), datos.get("telefono"), datos.get("motivo", ""))
     return {"error": "Herramienta desconocida."}
+
+
+def texto_precios() -> str:
+    """Tarifa por noche y lista de precios actuales, leídas de la base de datos."""
+    tarifas = sorted(set(Habitacion.objects.filter(activa=True).values_list("tarifa_noche", flat=True)))
+    if not tarifas:
+        noche = "- Hospedaje por noche: POR DEFINIR."
+    elif len(tarifas) == 1:
+        noche = f"- Hospedaje por noche: ${tarifas[0]:.2f} por habitación."
+    else:
+        noche = f"- Hospedaje por noche: desde ${tarifas[0]:.2f} hasta ${tarifas[-1]:.2f}, según la habitación."
+    lineas = [noche, "- Un segundo perro en la misma habitación suma 50 % de la tarifa de la habitación."]
+    for a in Articulo.objects.filter(activo=True):
+        precio = f"${a.precio:.2f}{' ' + a.unidad if a.unidad else ''}" if a.precio is not None else "POR DEFINIR"
+        lineas.append(f"- {a.nombre}: {precio}")
+    return "\n".join(lineas)
 
 
 def _cliente():
@@ -123,7 +143,7 @@ def responder(historial: list[dict]) -> str:
     cliente = _cliente()
     if cliente is None:
         return SIN_CLAVE
-    sistema = INSTRUCCIONES.replace("{hoy}", timezone.localdate().isoformat())
+    sistema = INSTRUCCIONES.replace("{hoy}", timezone.localdate().isoformat()).replace("{precios}", texto_precios())
     try:
         for _ in range(5):
             r = cliente.messages.create(model=MODELO, max_tokens=700, system=sistema,

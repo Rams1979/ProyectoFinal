@@ -1,0 +1,23 @@
+{% extends "hotel/base.html" %}
+{% block contenido %}
+  <h2>Perfiles</h2>
+  {% if error %}<p class="error">{{ error }}</p>{% endif %}
+  <table>
+    <tr><th>Perfil</th><th>Pantallas</th><th>Usuarios</th><th></th></tr>
+    {% for f in lista %}
+      <tr><td>{{ f.p.nombre }}{% if f.p.es_sistema %} <small>(de sistema)</small>{% endif %}</td><td>{{ f.p.areas_texto }}</td><td>{{ f.usuarios }}</td>
+        <td>{% if not f.p.es_sistema %}<a href="{% url 'perfil_editar' f.p.pk %}">Editar</a>
+          {% if not f.usuarios %}<form class="en-linea" method="post" action="{% url 'perfil_borrar' f.p.pk %}" onsubmit="return confirm('¿Borrar este perfil?')">{% csrf_token %}<button class="chico" type="submit">Borrar</button></form>{% endif %}{% endif %}</td></tr>
+    {% endfor %}
+  </table>
+  <h3>Nuevo perfil</h3>
+  <form class="filtros" method="post">
+    {% csrf_token %}
+    <label>Nombre <input name="nombre" value="{{ datos.nombre }}" maxlength="60" required></label>
+    <fieldset><legend>Pantallas que puede usar</legend>
+      {% for clave, etiqueta in areas %}<label><input type="checkbox" name="areas" value="{{ clave }}"> {{ etiqueta }}</label>{% endfor %}
+    </fieldset>
+    <button type="submit">Crear perfil</button>
+  </form>
+  <p class="nota">Todos los perfiles ven Disponibilidad y Chat. El perfil Administrador siempre tiene todo y no se edita, para que nadie quede sin acceso.</p>
+{% endblock %}

@@ -1,0 +1,17 @@
+{% extends "hotel/base.html" %}
+{% block contenido %}
+  <h2>Editar perfil · {{ p.nombre }}</h2>
+  {% if error %}<p class="error">{{ error }}</p>{% endif %}
+  {% if not bloqueado %}
+  <form class="filtros" method="post">
+    {% csrf_token %}
+    <label>Nombre <input name="nombre" value="{{ datos.nombre|default:p.nombre }}" maxlength="60" required></label>
+    <fieldset><legend>Pantallas que puede usar</legend>
+      {% for clave, etiqueta in areas %}<label><input type="checkbox" name="areas" value="{{ clave }}" {% if clave in marcadas %}checked{% endif %}> {{ etiqueta }}</label>{% endfor %}
+    </fieldset>
+    <button type="submit">Guardar</button>
+  </form>
+  <p class="nota">{{ usuarios }} usuario{{ usuarios|pluralize }} con este perfil. Los cambios aplican en su próxima pantalla.</p>
+  {% endif %}
+  <p><a href="{% url 'perfiles' %}">Volver a perfiles</a></p>
+{% endblock %}

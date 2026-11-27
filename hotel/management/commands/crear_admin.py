@@ -1,6 +1,8 @@
 import os
 
-from django.contrib.auth.models import Group, User
+from django.contrib.auth.models import User
+
+from hotel.models import Perfil, PerfilUsuario
 from django.core.management.base import BaseCommand
 
 
@@ -16,5 +18,5 @@ class Command(BaseCommand):
         if User.objects.filter(username=nombre).exists():
             return
         u = User.objects.create_superuser(username=nombre, password=clave, first_name="Administrador")
-        u.groups.add(Group.objects.get_or_create(name="Administrador")[0])
+        PerfilUsuario.objects.create(usuario=u, perfil=Perfil.objects.get(es_sistema=True))
         self.stdout.write(f"Administrador '{nombre}' creado.")

@@ -9,6 +9,8 @@ class Habitacion(models.Model):
     numero = models.PositiveSmallIntegerField(unique=True)
     tarifa_noche = models.DecimalField(max_digits=8, decimal_places=2, default=30)
     en_limpieza = models.BooleanField(default=False)
+    activa = models.BooleanField(default=True)  # una habitación inactiva no se ofrece ni aparece en el panel
+    nota = models.CharField(max_length=200, blank=True)
 
     class Meta:
         ordering = ["numero"]
@@ -16,6 +18,18 @@ class Habitacion(models.Model):
 
     def __str__(self):
         return f"Habitación {self.numero:02d}"
+
+
+class BloqueoHabitacion(models.Model):
+    """Habitación fuera de servicio (mantenimiento) entre dos fechas, ambas incluidas."""
+
+    habitacion = models.ForeignKey(Habitacion, on_delete=models.CASCADE, related_name="bloqueos")
+    desde = models.DateField()
+    hasta = models.DateField()
+    motivo = models.CharField(max_length=200, blank=True)
+
+    class Meta:
+        ordering = ["desde"]
 
 
 class Cliente(models.Model):
@@ -90,6 +104,7 @@ class Reserva(models.Model):
     entrada = models.DateField()
     salida = models.DateField()
     creada = models.DateTimeField(auto_now_add=True)
+    tarifa_noche = models.DecimalField(max_digits=8, decimal_places=2, null=True, blank=True)  # la de la habitación al reservar
     estado = models.CharField(max_length=12, choices=ESTADOS, default=CONFIRMADA)
     cliente = models.ForeignKey(Cliente, null=True, blank=True, on_delete=models.PROTECT, related_name="reservas")
     perro_ref = models.ForeignKey(Perro, null=True, blank=True, on_delete=models.PROTECT, related_name="reservas")
@@ -111,6 +126,11 @@ class Reserva(models.Model):
     def __str__(self):
         return f"{self.habitacion} {self.entrada} a {self.salida}"
 
+    def save(self, *args, **kwargs):
+        if self.tarifa_noche is None:  # se congela la tarifa vigente: un cambio posterior no altera esta reserva
+            self.tarifa_noche = self.habitacion.tarifa_noche
+        super().save(*args, **kwargs)
+
     @property
     def noches(self):
         return (self.salida - self.entrada).days
@@ -118,7 +138,7 @@ class Reserva(models.Model):
     @property
     def total(self):
         """Habitación × noches; el segundo perro suma el recargo sobre la tarifa de la habitación."""
-        base = self.habitacion.tarifa_noche * self.noches
+        base = (self.tarifa_noche if self.tarifa_noche is not None else self.habitacion.tarifa_noche) * self.noches
         if self.perro2:
             base += base * Decimal(settings.RECARGO_SEGUNDO_PERRO) / 100
         return base
@@ -213,3 +233,61 @@ class Tarea(models.Model):
 
     class Meta:
         constraints = [models.UniqueConstraint(fields=["item", "fecha"], name="una_tarea_por_dia")]
+
+
+AREAS = [
+    ("panel", "Panel, check-in y check-out"),
+    ("reservas", "Reservaciones: editar y cancelar"),
+    ("caja", "Pagos y caja"),
+    ("clientes", "Clientes y perros"),
+    ("cuidado", "Cuidado diario"),
+    ("habitaciones", "Habitaciones, tarifas y artículos"),
+    ("solicitudes", "Solicitudes de contacto"),
+    ("usuarios", "Usuarios y perfiles"),
+]
+
+
+class Perfil(models.Model):
+    """Conjunto de pantallas a las que puede entrar un usuario del personal."""
+
+    nombre = models.CharField(max_length=60, unique=True)
+    areas = models.JSONField(default=list, blank=True)
+    es_sistema = models.BooleanField(default=False)  # Administrador: siempre tiene todo y no se edita
+
+    class Meta:
+        ordering = ["nombre"]
+        verbose_name_plural = "perfiles"
+
+    def __str__(self):
+        return self.nombre
+
+    def tiene(self, area):
+        return self.es_sistema or area in self.areas
+
+    @property
+    def areas_texto(self):
+        if self.es_sistema:
+            return "Todas"
+        nombres = dict(AREAS)
+        return ", ".join(nombres[a] for a, _ in AREAS if a in self.areas) or "Ninguna"
+
+
+class PerfilUsuario(models.Model):
+    usuario = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="perfil_hotel")
+    perfil = models.ForeignKey(Perfil, on_delete=models.PROTECT, related_name="usuarios")
+
+
+class Articulo(models.Model):
+    """Maestro de artículos: lista de precios de servicios y productos (sin inventario)."""
+
+    TIPOS = [("servicio", "Servicio"), ("producto", "Producto")]
+    codigo = models.CharField(max_length=20, unique=True)
+    nombre = models.CharField(max_length=120)
+    tipo = models.CharField(max_length=10, choices=TIPOS, default="servicio")
+    descripcion = models.CharField(max_length=200, blank=True)
+    unidad = models.CharField(max_length=30, blank=True)  # por noche, por hora, por baño...
+    precio = models.DecimalField(max_digits=8, decimal_places=2, null=True, blank=True)  # vacío = por definir
+    activo = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ["codigo"]

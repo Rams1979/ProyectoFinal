@@ -16,8 +16,8 @@
     <label>Usuario <input name="username" value="{{ datos.username }}" required></label>
     <label>Nombre completo <input name="nombre" value="{{ datos.nombre }}" maxlength="150" required></label>
     <label>Contraseña (mínimo 10 caracteres) <input type="password" name="password" autocomplete="new-password" required></label>
-    <label>Perfil <select name="rol">{% for r in roles %}<option {% if datos.rol == r %}selected{% endif %}>{{ r }}</option>{% endfor %}</select></label>
+    <label>Perfil <select name="rol">{% for r in roles %}<option {% if datos.rol == r.nombre %}selected{% endif %}>{{ r.nombre }}</option>{% endfor %}</select></label>
     <button type="submit">Crear</button>
   </form>
-  <p class="nota">Recepción: panel, reservas, clientes, cuidado y caja. Administrador: además solicitudes de contacto y usuarios. Los usuarios no se borran, se desactivan, para conservar el historial.</p>
+  <p class="nota">Cada perfil define las pantallas que ve el usuario (ver <a href="{% url 'perfiles' %}">Perfiles</a>). Los usuarios no se borran, se desactivan, para conservar el historial.</p>
 {% endblock %}

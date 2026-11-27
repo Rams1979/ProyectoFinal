@@ -8,14 +8,16 @@ from .models import Habitacion, Reserva
 from .permisos import rol
 
 
-from django.contrib.auth.models import Group, User
+from django.contrib.auth.models import User
+
+from .models import Perfil, PerfilUsuario
 
 
 def entrar(client, rol="Recepción", nombre=None):
     """Crea un usuario con el rol dado y abre sesión."""
     nombre = nombre or f"u-{rol[:3].lower()}"
     u = User.objects.create_user(nombre, password="clave-de-prueba-1")
-    u.groups.add(Group.objects.get(name=rol))
+    PerfilUsuario.objects.create(usuario=u, perfil=Perfil.objects.get(nombre=rol))
     client.force_login(u)
     return u
 
@@ -316,7 +318,10 @@ class MenuTests(TestCase):
         for url in ("/panel/", "/disponibilidad/", "/reservaciones/", "/clientes/", "/chat/", "/solicitudes/", "/habitaciones/", "/usuarios/"):
             self.assertContains(r, f'href="{url}"')
             self.assertEqual(self.client.get(url).status_code, 200)
-        self.assertContains(self.client.get("/habitaciones/"), "Habitaciones (30)")
+        self.assertContains(self.client.get("/habitaciones/"), "Habitación 30")
+        for url in ("/articulos/", "/perfiles/"):
+            self.assertContains(r, f'href="{url}"')
+            self.assertEqual(self.client.get(url).status_code, 200)
 
 
 class AccesoTests(TestCase):
@@ -358,7 +363,7 @@ class AccesoTests(TestCase):
 
     def test_login_logout_y_auditoria(self):
         u = User.objects.create_user("rita", password="clave-de-prueba-1")
-        u.groups.add(Group.objects.get(name="Recepción"))
+        PerfilUsuario.objects.create(usuario=u, perfil=Perfil.objects.get(nombre="Recepción"))
         self.assertEqual(self.client.post("/ingresar/", {"username": "rita", "password": "mala"}).status_code, 400)
         r = self.client.post("/ingresar/?next=/panel/", {"username": "rita", "password": "clave-de-prueba-1"})
         self.assertEqual((r.status_code, r.url), (302, "/panel/"))
@@ -379,7 +384,7 @@ class AccesoTests(TestCase):
         from django.core.cache import cache
         cache.clear()
         u = User.objects.create_user("beto", password="clave-de-prueba-1")
-        u.groups.add(Group.objects.get(name="Recepción"))
+        PerfilUsuario.objects.create(usuario=u, perfil=Perfil.objects.get(nombre="Recepción"))
         for _ in range(5):
             self.client.post("/ingresar/", {"username": "beto", "password": "mala"})
         r = self.client.post("/ingresar/", {"username": "beto", "password": "clave-de-prueba-1"})
@@ -498,7 +503,7 @@ class CancelarEditarTests(TestCase):
 
 from decimal import Decimal
 
-from .models import ItemPlan, Pago, Tarea
+from .models import Articulo, BloqueoHabitacion, ItemPlan, Pago, Tarea
 
 
 class SegundoPerroTests(TestCase):
@@ -673,7 +678,7 @@ class MantenimientoUsuariosTests(TestCase):
         self.assertEqual(self._crear(nombre="").status_code, 400)
         self.assertEqual(self._crear().status_code, 302)
         u = User.objects.get(username="rita")
-        self.assertEqual((u.first_name, list(u.groups.values_list("name", flat=True))), ("Rita Mora", ["Recepción"]))
+        self.assertEqual((u.first_name, u.perfil_hotel.perfil.nombre), ("Rita Mora", "Recepción"))
         self.assertContains(self.client.get("/usuarios/"), "Rita Mora")
 
     def test_editar_nombre_perfil_y_clave(self):
@@ -760,3 +765,228 @@ class MantenimientoUsuariosTests(TestCase):
         self.assertEqual(self.client.get(f"/usuarios/{self.admin.pk}/").status_code, 403)
         self.assertEqual(self.client.post(f"/usuarios/{self.admin.pk}/", {"nombre": "X", "rol": "Recepción"}).status_code, 403)
         self.assertEqual(self.client.get("/clave/").status_code, 200)
+
+
+class PerfilesPropiosTests(TestCase):
+    def setUp(self):
+        self.admin = entrar(self.client, "Administrador", "jefe")
+
+    def test_perfiles_de_origen(self):
+        self.assertEqual(set(Perfil.objects.values_list("nombre", flat=True)), {"Administrador", "Recepción", "Cuidador"})
+        self.assertTrue(Perfil.objects.get(nombre="Administrador").es_sistema)
+
+    def test_crear_perfil_y_asignarlo(self):
+        r = self.client.post("/perfiles/", {"nombre": "Contador", "areas": ["caja", "reservas"]})
+        self.assertEqual(r.status_code, 302)
+        p = Perfil.objects.get(nombre="Contador")
+        self.assertEqual(p.areas, ["reservas", "caja"])  # en el orden del catálogo
+        self.client.post("/usuarios/", {"username": "cony", "nombre": "Cony", "password": "una-clave-larga-1", "rol": "Contador"})
+        self.client.post("/salir/")
+        self.client.post("/ingresar/", {"username": "cony", "password": "una-clave-larga-1"})
+        self.assertEqual(self.client.get("/caja/").status_code, 200)
+        self.assertEqual(self.client.get("/reservaciones/").status_code, 200)
+        for url in ("/panel/", "/clientes/", "/cuidado/", "/habitaciones/", "/articulos/", "/solicitudes/", "/usuarios/", "/perfiles/"):
+            self.assertEqual(self.client.get(url).status_code, 403, url)
+        menu = self.client.get("/")
+        self.assertContains(menu, "Caja del día")
+        self.assertNotContains(menu, "Panel de ocupación")
+
+    def test_cuidador_solo_ve_cuidado(self):
+        self.client.post("/salir/")
+        entrar(self.client, "Cuidador", "cuido")
+        self.assertEqual(self.client.get("/cuidado/").status_code, 200)
+        self.assertEqual(self.client.get("/caja/").status_code, 403)
+        d = timezone.localdate()
+        res = Reserva.objects.create(habitacion=Habitacion.objects.get(numero=1), nombre="A", telefono="1", entrada=d, salida=d + timedelta(days=1))
+        self.assertEqual(self.client.post(f"/checkin/{res.pk}/", {"perro": "X"}).status_code, 403)
+        self.assertEqual(self.client.post(f"/reserva/{res.pk}/cancelar/").status_code, 403)
+
+    def test_validaciones_y_edicion(self):
+        self.assertEqual(self.client.post("/perfiles/", {"nombre": "", "areas": ["caja"]}).status_code, 400)
+        self.assertEqual(self.client.post("/perfiles/", {"nombre": "Vacío"}).status_code, 400)
+        self.assertEqual(self.client.post("/perfiles/", {"nombre": "recepción", "areas": ["caja"]}).status_code, 400)
+        self.client.post("/perfiles/", {"nombre": "Contador", "areas": ["caja", "inventada"]})
+        p = Perfil.objects.get(nombre="Contador")
+        self.assertEqual(p.areas, ["caja"])  # un área inexistente se ignora
+        self.client.post(f"/perfiles/{p.pk}/", {"nombre": "Contabilidad", "areas": ["caja", "clientes"]})
+        p.refresh_from_db()
+        self.assertEqual((p.nombre, p.areas), ("Contabilidad", ["caja", "clientes"]))
+
+    def test_administrador_no_se_edita_ni_borra_y_perfil_en_uso_no_se_borra(self):
+        adm = Perfil.objects.get(nombre="Administrador")
+        self.assertEqual(self.client.get(f"/perfiles/{adm.pk}/").status_code, 409)
+        self.assertEqual(self.client.post(f"/perfiles/{adm.pk}/", {"nombre": "X", "areas": ["caja"]}).status_code, 409)
+        self.client.post(f"/perfiles/{adm.pk}/borrar/")
+        self.assertTrue(Perfil.objects.filter(pk=adm.pk).exists())
+        rec = Perfil.objects.get(nombre="Recepción")
+        entrar(self.client, "Recepción", "rita")
+        self.client.force_login(self.admin)
+        self.client.post(f"/perfiles/{rec.pk}/borrar/")
+        self.assertTrue(Perfil.objects.filter(pk=rec.pk).exists())  # tiene un usuario
+        vacio = Perfil.objects.get(nombre="Cuidador")
+        self.client.post(f"/perfiles/{vacio.pk}/borrar/")
+        self.assertFalse(Perfil.objects.filter(pk=vacio.pk).exists())
+
+    def test_cambio_de_areas_aplica_de_inmediato(self):
+        rec = Perfil.objects.get(nombre="Recepción")
+        entrar(self.client, "Recepción", "rita")
+        self.assertEqual(self.client.get("/caja/").status_code, 200)
+        rec.areas = ["panel"]
+        rec.save()
+        self.assertEqual(self.client.get("/caja/").status_code, 403)
+
+    def test_usuario_con_perfil_degradado_pierde_el_acceso_de_admin(self):
+        su = User.objects.create_superuser("root", password="una-clave-larga-1")
+        PerfilUsuario.objects.create(usuario=su, perfil=Perfil.objects.get(nombre="Administrador"))
+        self.client.post(f"/usuarios/{su.pk}/", {"nombre": "Root", "rol": "Cuidador", "activo": "1"})
+        su.refresh_from_db()
+        self.assertFalse(su.is_superuser)
+        self.assertEqual(su.perfil_hotel.perfil.nombre, "Cuidador")
+
+
+class TarifasYHabitacionesTests(TestCase):
+    def setUp(self):
+        self.hoy = timezone.localdate()
+        self.u = entrar(self.client, "Administrador")
+        self.h1 = Habitacion.objects.get(numero=1)
+        self.d = self.hoy + timedelta(days=10)
+
+    def _reserva(self, hab=None, dias=2, desde=None):
+        desde = desde or self.d
+        return Reserva.objects.create(habitacion=hab or self.h1, nombre="Ana", telefono="1", entrada=desde, salida=desde + timedelta(days=dias))
+
+    def test_cambio_de_tarifa_no_altera_reservas_hechas(self):
+        r = self._reserva()
+        self.assertEqual(r.total, Decimal("60"))
+        self.client.post(f"/habitaciones/{self.h1.pk}/", {"accion": "guardar", "tarifa": "40", "activa": "1"})
+        self.h1.refresh_from_db()
+        r.refresh_from_db()
+        self.assertEqual((r.tarifa_noche, r.total), (Decimal("30.00"), Decimal("60.00")))
+        nueva = self._reserva(dias=1, desde=self.d + timedelta(days=5))
+        self.assertEqual(nueva.total, Decimal("40"))
+
+    def test_tarifa_a_todas_y_validaciones(self):
+        self.assertEqual(self.client.post("/habitaciones/", {"accion": "tarifa_todas", "tarifa": "0"}).status_code, 400)
+        self.assertEqual(self.client.post("/habitaciones/", {"accion": "tarifa_todas", "tarifa": "abc"}).status_code, 400)
+        self.client.post("/habitaciones/", {"accion": "tarifa_todas", "tarifa": "35,50"})
+        self.assertEqual(set(Habitacion.objects.values_list("tarifa_noche", flat=True)), {Decimal("35.50")})
+        r = self.client.get("/disponibilidad/", {"entrada": self.d.isoformat(), "salida": (self.d + timedelta(days=2)).isoformat()})
+        self.assertContains(r, "71")  # 2 noches a 35,50
+
+    def test_nueva_habitacion(self):
+        self.assertEqual(self.client.post("/habitaciones/", {"accion": "nueva", "numero": "1", "tarifa": "30"}).status_code, 400)
+        self.assertEqual(self.client.post("/habitaciones/", {"accion": "nueva", "numero": "31", "tarifa": "45"}).status_code, 302)
+        self.assertEqual(Habitacion.objects.get(numero=31).tarifa_noche, Decimal("45.00"))
+        self.assertIn(Habitacion.objects.get(numero=31), habitaciones_libres(self.d, self.d + timedelta(days=1)))
+
+    def test_desactivar_exige_no_tener_reservas_vigentes(self):
+        self._reserva()
+        r = self.client.post(f"/habitaciones/{self.h1.pk}/", {"accion": "guardar", "tarifa": "30"})
+        self.assertContains(r, "reserva(s) vigente(s)", status_code=409)
+        h2 = Habitacion.objects.get(numero=2)
+        self.client.post(f"/habitaciones/{h2.pk}/", {"accion": "guardar", "tarifa": "30"})
+        h2.refresh_from_db()
+        self.assertFalse(h2.activa)
+        self.assertNotIn(h2, habitaciones_libres(self.d, self.d + timedelta(days=1)))
+        self.assertNotContains(self.client.get("/panel/"), "Habitación 02")
+
+    def test_mantenimiento_bloquea_fechas_y_reservas(self):
+        hasta = self.d + timedelta(days=2)
+        r = self.client.post(f"/habitaciones/{self.h1.pk}/", {"accion": "bloqueo", "desde": self.d.isoformat(), "hasta": hasta.isoformat(), "motivo": "pintura"})
+        self.assertEqual(r.status_code, 302)
+        # ambas fechas incluidas: ocupa hasta el día "hasta"
+        self.assertNotIn(self.h1, habitaciones_libres(self.d, self.d + timedelta(days=1)))
+        self.assertNotIn(self.h1, habitaciones_libres(hasta, hasta + timedelta(days=1)))
+        self.assertIn(self.h1, habitaciones_libres(hasta + timedelta(days=1), hasta + timedelta(days=2)))
+        self.assertIn(self.h1, habitaciones_libres(self.d - timedelta(days=2), self.d))  # sale el día que empieza
+        # no se puede reservar en el rango
+        datos = {"entrada": self.d.isoformat(), "salida": (self.d + timedelta(days=1)).isoformat(), "nombre": "Luis", "telefono": "7"}
+        self.assertEqual(self.client.post(f"/reservar/{self.h1.pk}/", datos).status_code, 409)
+        # quitar el bloqueo la libera
+        b = BloqueoHabitacion.objects.get()
+        self.client.post(f"/habitaciones/{self.h1.pk}/", {"accion": "quitar_bloqueo", "bloqueo_id": b.pk})
+        self.assertIn(self.h1, habitaciones_libres(self.d, self.d + timedelta(days=1)))
+
+    def test_no_se_bloquea_con_reservas_en_esas_fechas(self):
+        self._reserva()
+        r = self.client.post(f"/habitaciones/{self.h1.pk}/", {"accion": "bloqueo", "desde": self.d.isoformat(), "hasta": (self.d + timedelta(days=1)).isoformat()})
+        self.assertContains(r, "reserva(s) en esas fechas", status_code=409)
+        self.assertEqual(self.client.post(f"/habitaciones/{self.h1.pk}/", {"accion": "bloqueo", "desde": self.d.isoformat(), "hasta": (self.d - timedelta(days=1)).isoformat()}).status_code, 400)
+        self.assertEqual(BloqueoHabitacion.objects.count(), 0)
+        # sí se puede justo después de que sale
+        self.assertEqual(self.client.post(f"/habitaciones/{self.h1.pk}/", {"accion": "bloqueo", "desde": (self.d + timedelta(days=2)).isoformat(), "hasta": (self.d + timedelta(days=3)).isoformat()}).status_code, 302)
+
+    def test_panel_muestra_mantenimiento_y_checkin_se_bloquea(self):
+        BloqueoHabitacion.objects.create(habitacion=self.h1, desde=self.hoy, hasta=self.hoy + timedelta(days=1))
+        r = self.client.get("/panel/")
+        self.assertContains(r, "En mantenimiento hasta el")
+        self.assertContains(r, "<strong>1</strong> en mantenimiento")
+        res = self._reserva(desde=self.hoy)  # reserva anterior al bloqueo (creada directo)
+        self.assertContains(self.client.post(f"/checkin/{res.pk}/", {"perro": "Rocky"}), "mantenimiento hoy", status_code=409)
+
+    def test_cambiar_de_habitacion_en_reserva_usa_la_tarifa_vigente_de_la_nueva(self):
+        h3 = Habitacion.objects.get(numero=3)
+        h3.tarifa_noche = Decimal("50")
+        h3.save()
+        r = self._reserva()
+        self.client.post(f"/reserva/{r.pk}/editar/", {"entrada": self.d.isoformat(), "salida": (self.d + timedelta(days=2)).isoformat(),
+                         "habitacion": h3.pk, "nombre": "Ana", "telefono": "1", "perro": ""})
+        r.refresh_from_db()
+        self.assertEqual((r.habitacion, r.total), (h3, Decimal("100.00")))
+
+    def test_perfil_sin_area_habitaciones_no_entra(self):
+        self.client.post("/salir/")
+        entrar(self.client, "Recepción", "rita")
+        for url in ("/habitaciones/", f"/habitaciones/{self.h1.pk}/", "/articulos/"):
+            self.assertEqual(self.client.get(url).status_code, 403, url)
+
+
+class ArticulosTests(TestCase):
+    def setUp(self):
+        entrar(self.client, "Administrador")
+
+    def test_servicios_de_origen_con_precio_por_definir(self):
+        self.assertEqual(Articulo.objects.count(), 10)
+        self.assertFalse(Articulo.objects.filter(precio__isnull=False).exists())
+        self.assertContains(self.client.get("/articulos/"), "Por definir")
+
+    def test_alta_edicion_y_desactivar(self):
+        r = self.client.post("/articulos/", {"nombre": "Baño premium", "tipo": "servicio", "precio": "15", "unidad": "por baño"})
+        self.assertEqual(r.status_code, 302)
+        a = Articulo.objects.get(nombre="Baño premium")
+        self.assertTrue(a.codigo.startswith("ART-"))
+        self.assertEqual(a.precio, Decimal("15.00"))
+        self.assertEqual(self.client.post("/articulos/", {"nombre": "X", "tipo": "servicio", "precio": "-3"}).status_code, 400)
+        self.assertEqual(self.client.post("/articulos/", {"nombre": "Y", "tipo": "otro"}).status_code, 400)
+        self.assertEqual(self.client.post("/articulos/", {"nombre": "Z", "tipo": "producto", "codigo": a.codigo}).status_code, 400)
+        self.client.post(f"/articulos/{a.pk}/", {"codigo": a.codigo, "nombre": "Baño premium", "tipo": "servicio", "precio": "", "activo": "1"})
+        a.refresh_from_db()
+        self.assertIsNone(a.precio)  # vacío = por definir
+        self.client.post(f"/articulos/{a.pk}/", {"codigo": a.codigo, "nombre": "Baño premium", "tipo": "servicio", "precio": "18"})
+        a.refresh_from_db()
+        self.assertFalse(a.activo)
+
+    def test_chat_usa_precios_vigentes(self):
+        from . import chat as chat_mod
+        Articulo.objects.filter(codigo="SRV-006").update(precio=Decimal("20"))
+        Articulo.objects.filter(codigo="SRV-001").update(activo=False)
+        texto = chat_mod.texto_precios()
+        self.assertIn("Hospedaje por noche: $30.00", texto)
+        self.assertIn("Baño y peluquería canina (grooming): $20.00 por servicio", texto)
+        self.assertIn("Transporte de mascotas: POR DEFINIR", texto)
+        self.assertNotIn("Hospedaje por períodos prolongados", texto)
+        Habitacion.objects.filter(numero=1).update(tarifa_noche=Decimal("40"))
+        self.assertIn("desde $30.00 hasta $40.00", chat_mod.texto_precios())
+
+    def test_chat_consulta_disponibilidad_con_la_tarifa_mas_baja(self):
+        from . import chat as chat_mod
+        Habitacion.objects.update(tarifa_noche=Decimal("50"))
+        Habitacion.objects.filter(numero=2).update(tarifa_noche=Decimal("35"))
+        d = timezone.localdate() + timedelta(days=3)
+        r = chat_mod.consultar_disponibilidad(d.isoformat(), (d + timedelta(days=2)).isoformat())
+        self.assertEqual((r["tarifa_noche_usd"], r["total_por_habitacion_usd"]), (35.0, 70.0))
+
+    def test_solo_perfil_con_area_habitaciones_entra(self):
+        self.client.post("/salir/")
+        entrar(self.client, "Cuidador", "cuido")
+        self.assertEqual(self.client.get("/articulos/").status_code, 403)

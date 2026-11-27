@@ -35,15 +35,15 @@ Los requisitos específicos los establece el hotel con su veterinario (POR DEFIN
 - Medicamentos (si utiliza).
 - Instrucciones especiales de alimentación.
 
-## Tarifa de hospedaje (datos de ejemplo del prototipo)
-- Una noche en habitación individual: $30 por noche. Todas las habitaciones del prototipo son iguales.
-- El total se calcula como noches × $30.
-- Métodos de pago aceptados: efectivo, SINPE y tarjeta.
-- Descuentos por varios días o por varios perros, anticipo y política de cancelación y devolución: POR DEFINIR.
+## Tarifa de hospedaje
+- Una noche en habitación individual; el total es noches × tarifa por noche. Las tarifas y precios vigentes se
+  indican en la sección "PRECIOS VIGENTES" y siempre prevalecen.
+- Métodos de pago aceptados: efectivo, SINPE y tarjeta. El pago se coordina con el hotel.
+- Descuentos por varios días, anticipo y política de cancelación y devolución: POR DEFINIR.
 
 ## Reservas
 - La disponibilidad real se consulta por fechas en la página de disponibilidad; ahí también se reserva.
-- En el prototipo la reserva queda confirmada al reservar en la página. El chat no crea ni confirma reservas.
+- La reserva queda confirmada al reservar en la página; el pago se coordina con el hotel. El chat no crea ni confirma reservas.
 
 ## Horario de atención
 - El hotel atiende las 24 horas, todos los días (24/7).

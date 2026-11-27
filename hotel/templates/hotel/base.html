@@ -27,6 +27,7 @@
     .panel li { border: 2px solid #ccc; border-radius: 8px; padding: .5rem .6rem; font-size: .9rem; display: flex; flex-direction: column; gap: .25rem; }
     .panel li.ocupada { border-color: #1a73e8; background: #e8f0fe; }
     .panel li.llega { border-color: #b26a00; background: #fff4e0; }
+    .panel li.mantenimiento { border-color: #8e24aa; background: #f6e9fa; }
     .panel li.limpieza { border-color: #777; background: #f0f0f0; border-style: dashed; }
     .panel li.libre { border-color: #2e7d32; }
     .menu { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: .8rem; list-style: none; padding: 0; }
@@ -47,7 +48,7 @@
   <h1>Inu no Hoteru 犬のホテル</h1>
   <nav>
     {% if rol %}
-      <a href="{% url 'inicio' %}">Menú</a><a href="{% url 'disponibilidad' %}">Disponibilidad</a><a href="{% url 'panel' %}">Panel</a><a href="{% url 'reservaciones' %}">Reservaciones</a><a href="{% url 'cuidado' %}">Cuidado</a><a href="{% url 'caja' %}">Caja</a><a href="{% url 'clientes' %}">Clientes</a><a href="{% url 'chat' %}">Chat</a>{% if es_admin %}<a href="{% url 'solicitudes' %}">Solicitudes</a><a href="{% url 'usuarios' %}">Usuarios</a>{% endif %}
+      <a href="{% url 'inicio' %}">Menú</a><a href="{% url 'disponibilidad' %}">Disponibilidad</a>{% if "panel" in areas %}<a href="{% url 'panel' %}">Panel</a>{% endif %}{% if "reservas" in areas %}<a href="{% url 'reservaciones' %}">Reservaciones</a>{% endif %}{% if "cuidado" in areas %}<a href="{% url 'cuidado' %}">Cuidado</a>{% endif %}{% if "caja" in areas %}<a href="{% url 'caja' %}">Caja</a>{% endif %}{% if "clientes" in areas %}<a href="{% url 'clientes' %}">Clientes</a>{% endif %}<a href="{% url 'chat' %}">Chat</a>{% if "habitaciones" in areas %}<a href="{% url 'habitaciones' %}">Habitaciones</a><a href="{% url 'articulos' %}">Artículos</a>{% endif %}{% if "solicitudes" in areas %}<a href="{% url 'solicitudes' %}">Solicitudes</a>{% endif %}{% if "usuarios" in areas %}<a href="{% url 'usuarios' %}">Usuarios</a><a href="{% url 'perfiles' %}">Perfiles</a>{% endif %}
       <form class="en-linea" method="post" action="{% url 'logout' %}">{% csrf_token %}<button class="chico" type="submit">Salir ({{ user.first_name|default:user.username }} · {{ rol }})</button></form><a href="{% url 'cambiar_clave' %}">Mi contraseña</a>
     {% else %}
       <a href="{% url 'inicio' %}">Inicio</a><a href="{% url 'disponibilidad' %}">Disponibilidad</a><a href="{% url 'chat' %}">Chat</a><a href="{% url 'login' %}">Ingreso del personal</a>

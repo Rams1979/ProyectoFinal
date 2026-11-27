@@ -1,0 +1,29 @@
+{% extends "hotel/base.html" %}
+{% block contenido %}
+  <h2>{{ h }}</h2>
+  {% if error %}<p class="error">{{ error }}</p>{% endif %}
+  <form class="filtros" method="post">
+    {% csrf_token %}<input type="hidden" name="accion" value="guardar">
+    <label>Tarifa por noche (USD) <input name="tarifa" inputmode="decimal" value="{{ datos.tarifa|default:h.tarifa_noche }}" required></label>
+    <label>Nota <input name="nota" maxlength="200" value="{{ datos.nota|default:h.nota }}"></label>
+    <label><input type="checkbox" name="activa" value="1" {% if h.activa %}checked{% endif %}> Habitación activa</label>
+    <button type="submit">Guardar</button>
+  </form>
+  <p class="nota">Una habitación inactiva no se ofrece ni aparece en el panel. La nueva tarifa no cambia las reservas ya hechas.</p>
+  <h3>Mantenimiento</h3>
+  <table>
+    <tr><th>Desde</th><th>Hasta</th><th>Motivo</th><th></th></tr>
+    {% for b in bloqueos %}
+      <tr><td>{{ b.desde|date:"d/m/Y" }}</td><td>{{ b.hasta|date:"d/m/Y" }}</td><td>{{ b.motivo }}</td>
+        <td><form class="en-linea" method="post">{% csrf_token %}<input type="hidden" name="accion" value="quitar_bloqueo"><input type="hidden" name="bloqueo_id" value="{{ b.pk }}"><button class="chico" type="submit">Quitar</button></form></td></tr>
+    {% empty %}<tr><td colspan="4">Sin mantenimientos programados.</td></tr>{% endfor %}
+  </table>
+  <form class="filtros" method="post">
+    {% csrf_token %}<input type="hidden" name="accion" value="bloqueo">
+    <label>Desde <input type="date" name="desde" required></label>
+    <label>Hasta (incluido) <input type="date" name="hasta" required></label>
+    <label>Motivo <input name="motivo" maxlength="200"></label>
+    <button type="submit">Bloquear fechas</button>
+  </form>
+  <p><a href="{% url 'habitaciones' %}">Volver a habitaciones</a></p>
+{% endblock %}

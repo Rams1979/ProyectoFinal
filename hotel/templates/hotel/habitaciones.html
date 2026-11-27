@@ -1,11 +1,27 @@
 {% extends "hotel/base.html" %}
 {% block contenido %}
-  <h2>Habitaciones ({{ habitaciones|length }})</h2>
-  <ul class="lista">
-    {% for h in habitaciones %}
-      <li><span>{{ h }}</span><span>${{ h.tarifa_noche|floatformat:0 }} por noche</span></li>
-    {% empty %}
-      <li>No hay habitaciones cargadas.</li>
+  <h2>Habitaciones y tarifas</h2>
+  {% if error %}<p class="error">{{ error }}</p>{% endif %}
+  <table>
+    <tr><th>Habitación</th><th>Tarifa por noche</th><th>Estado</th><th></th></tr>
+    {% for f in filas %}
+      <tr><td>{{ f.h }}</td><td>${{ f.h.tarifa_noche }}</td>
+        <td>{% if not f.h.activa %}Inactiva{% elif f.mantenimiento %}En mantenimiento hasta el {{ f.mantenimiento.hasta|date:"d/m/Y" }}{% elif f.proximo %}Mantenimiento desde el {{ f.proximo.desde|date:"d/m/Y" }}{% else %}Activa{% endif %}{% if f.h.nota %}<br><small>{{ f.h.nota }}</small>{% endif %}</td>
+        <td><a href="{% url 'habitacion_editar' f.h.pk %}">Editar</a></td></tr>
     {% endfor %}
-  </ul>
+  </table>
+  <h3>Cambiar la tarifa de todas las habitaciones activas</h3>
+  <form class="filtros" method="post" onsubmit="return confirm('¿Cambiar la tarifa de todas las habitaciones activas?')">
+    {% csrf_token %}<input type="hidden" name="accion" value="tarifa_todas">
+    <label>Tarifa por noche (USD) <input name="tarifa" inputmode="decimal" required></label>
+    <button type="submit">Aplicar a todas</button>
+  </form>
+  <p class="nota">Las reservas ya hechas conservan la tarifa con que se reservaron.</p>
+  <h3>Nueva habitación</h3>
+  <form class="filtros" method="post">
+    {% csrf_token %}<input type="hidden" name="accion" value="nueva">
+    <label>Número <input name="numero" inputmode="numeric" required></label>
+    <label>Tarifa por noche (USD) <input name="tarifa" inputmode="decimal" required></label>
+    <button type="submit">Agregar</button>
+  </form>
 {% endblock %}

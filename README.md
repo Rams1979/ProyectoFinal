@@ -40,6 +40,20 @@ Prototipo con datos de ejemplo (no es un sistema para operar el hotel). Django +
 - Editar (`/usuarios/<id>/`): nombre, perfil, nueva contraseña (opcional) y activo. No se puede cambiar el propio perfil ni desactivarse, y siempre debe quedar un administrador activo. Los usuarios no se borran, se desactivan, para conservar el historial.
 - `/clave/`: cada usuario cambia su propia contraseña sin cerrar su sesión.
 
+## Etapa 12: perfiles propios
+- `/perfiles/` (pantalla Usuarios y perfiles): el administrador crea perfiles marcando las pantallas que cada uno puede usar. Vienen tres: Administrador (de sistema, siempre todo, no se edita), Recepción y Cuidador (solo cuidado diario).
+- Las áreas son: panel y check-in/out, reservaciones (editar y cancelar), pagos y caja, clientes, cuidado, habitaciones/tarifas/artículos, solicitudes y usuarios/perfiles. Disponibilidad y chat son para todos.
+- Un perfil en uso no se borra; los cambios de pantallas aplican de inmediato. Los usuarios que ya existían pasaron a su perfil según el rol que tenían.
+
+## Etapa 13: habitaciones y tarifas
+- `/habitaciones/`: tarifa por noche por habitación, cambio de tarifa para todas, alta de habitaciones y activar/desactivar (no se desactiva con reservas vigentes).
+- Mantenimiento por rango de fechas (ambas incluidas): la habitación no se ofrece, no admite check-in y se ve en el panel. No se bloquea si hay reservas en esas fechas.
+- Cada reserva congela la tarifa con que se hizo: un cambio posterior no altera sus totales. Si se cambia de habitación, rige la tarifa vigente de la nueva.
+
+## Etapa 14: maestro de artículos (lista de precios)
+- `/articulos/`: código, nombre, tipo (servicio o producto), unidad, precio y activo. Vienen cargados los 10 servicios del hotel con el precio por definir. Sin inventario ni facturación.
+- El chat lee la tarifa por noche y esta lista en cada respuesta: lo que no tiene precio lo deriva a la persona de turno.
+
 ## Menú principal
 - `/` es el menú con acceso a todas las pantallas y un dato vivo en cada una. La lista de habitaciones pasó a `/habitaciones/`.
 
