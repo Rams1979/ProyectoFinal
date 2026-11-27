@@ -409,3 +409,87 @@ class AccesoTests(TestCase):
         finally:
             os.environ.pop("ADMIN_USERNAME"); os.environ.pop("ADMIN_PASSWORD")
         self.assertEqual(User.objects.filter(username="jefe", is_superuser=True).count(), 1)
+
+
+class CancelarEditarTests(TestCase):
+    def setUp(self):
+        self.hoy = timezone.localdate()
+        self.d = self.hoy + timedelta(days=5)
+        self.h1, self.h2 = Habitacion.objects.get(numero=1), Habitacion.objects.get(numero=2)
+
+    def _reserva(self, hab=None, dias=2, **kw):
+        return Reserva.objects.create(habitacion=hab or self.h1, nombre="Ana", telefono="1",
+                                      entrada=self.d, salida=self.d + timedelta(days=dias), **kw)
+
+    def test_cancelar_libera_la_habitacion(self):
+        r = self._reserva()
+        self.assertNotIn(self.h1, habitaciones_libres(self.d, self.d + timedelta(days=2)))
+        u = entrar(self.client)
+        self.assertEqual(self.client.post(f"/reserva/{r.pk}/cancelar/", {"motivo": "viaje"}).status_code, 302)
+        r.refresh_from_db()
+        self.assertEqual((r.estado, r.motivo_cancelacion, r.cancelada_por), ("cancelada", "viaje", u))
+        self.assertIn(self.h1, habitaciones_libres(self.d, self.d + timedelta(days=2)))
+        self.assertContains(self.client.get("/reservaciones/"), "Cancelada")
+        # se puede volver a reservar esas fechas
+        self.assertEqual(self._reserva().pk is not None, True)
+
+    def test_no_se_cancela_una_reserva_en_hotel(self):
+        r = self._reserva(estado="activa")
+        entrar(self.client)
+        self.client.post(f"/reserva/{r.pk}/cancelar/")
+        r.refresh_from_db()
+        self.assertEqual(r.estado, "activa")
+
+    def test_visitante_cancela_solo_la_suya(self):
+        ajena = self._reserva(self.h2)
+        datos = {"entrada": self.d.isoformat(), "salida": (self.d + timedelta(days=2)).isoformat(), "nombre": "Luis", "telefono": "77"}
+        propia = Reserva.objects.get(pk=int(self.client.post(f"/reservar/{self.h1.pk}/", datos).url.split("/")[2]))
+        self.assertEqual(self.client.post(f"/reserva/{ajena.pk}/cancelar/").status_code, 403)
+        r = self.client.post(f"/reserva/{propia.pk}/cancelar/", follow=True)
+        self.assertContains(r, "Reserva cancelada")
+        propia.refresh_from_db(); ajena.refresh_from_db()
+        self.assertEqual((propia.estado, propia.cancelada_por, ajena.estado), ("cancelada", None, "confirmada"))
+        self.assertEqual(self.client.get(f"/reserva/{propia.pk}/editar/").status_code, 302)  # editar es del personal
+
+    def test_editar_fechas_y_habitacion(self):
+        r = self._reserva()
+        otra = self._reserva(self.h2)
+        entrar(self.client)
+        base = {"entrada": self.d.isoformat(), "salida": (self.d + timedelta(days=3)).isoformat(),
+                "habitacion": self.h1.pk, "nombre": "Ana P.", "telefono": "1", "perro": "Rocky"}
+        # la propia reserva no cuenta contra sí misma
+        self.assertEqual(self.client.post(f"/reserva/{r.pk}/editar/", base).status_code, 302)
+        r.refresh_from_db()
+        self.assertEqual((r.salida, r.nombre, r.perro), (self.d + timedelta(days=3), "Ana P.", "Rocky"))
+        # a una habitación ocupada: rechazado y sin cambios
+        self.assertEqual(self.client.post(f"/reserva/{r.pk}/editar/", {**base, "habitacion": self.h2.pk}).status_code, 409)
+        r.refresh_from_db()
+        self.assertEqual(r.habitacion, self.h1)
+        # fechas inválidas
+        self.assertEqual(self.client.post(f"/reserva/{r.pk}/editar/", {**base, "salida": base["entrada"]}).status_code, 400)
+        # cambio válido de habitación
+        libre = Habitacion.objects.get(numero=3)
+        self.assertEqual(self.client.post(f"/reserva/{r.pk}/editar/", {**base, "habitacion": libre.pk}).status_code, 302)
+        r.refresh_from_db()
+        self.assertEqual(r.habitacion, libre)
+        self.assertContains(self.client.get(f"/reserva/{r.pk}/editar/"), "Guardar cambios")
+
+    def test_en_hotel_solo_se_mueve_la_salida(self):
+        r = Reserva.objects.create(habitacion=self.h1, nombre="Ana", telefono="1", entrada=self.hoy - timedelta(days=1),
+                                   salida=self.hoy + timedelta(days=1), estado="activa", perro="Rocky")
+        entrar(self.client)
+        nueva = self.hoy + timedelta(days=4)
+        self.client.post(f"/reserva/{r.pk}/editar/", {"salida": nueva.isoformat(), "nombre": "Cambiado"})
+        r.refresh_from_db()
+        self.assertEqual((r.salida, r.nombre), (nueva, "Ana"))
+        # no se puede extender sobre otra reserva
+        Reserva.objects.create(habitacion=self.h1, nombre="Z", telefono="2", entrada=self.hoy + timedelta(days=2), salida=self.hoy + timedelta(days=3))
+        malo = self.client.post(f"/reserva/{r.pk}/editar/", {"salida": (self.hoy + timedelta(days=6)).isoformat()})
+        self.assertEqual(malo.status_code, 409)
+
+    def test_cerrada_y_cancelada_no_se_editan(self):
+        entrar(self.client)
+        for estado in ("cerrada", "cancelada"):
+            r = self._reserva(self.h2, estado=estado)
+            self.assertEqual(self.client.get(f"/reserva/{r.pk}/editar/").status_code, 409)
+            r.delete()

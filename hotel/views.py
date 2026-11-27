@@ -31,7 +31,7 @@ def inicio(request):
     menu = [
         ("panel", "Panel de ocupación", f"{ocupadas} ocupadas · {llegan} llegan hoy", "Estado de las habitaciones hoy, check-in y check-out."),
         ("disponibilidad", "Disponibilidad", "Buscar por fechas", "Habitaciones libres y reserva."),
-        ("reservaciones", "Reservaciones", f"{Reserva.objects.exclude(estado=Reserva.CERRADA).count()} vigentes", "Lista de reservas con su estado."),
+        ("reservaciones", "Reservaciones", f"{Reserva.objects.exclude(estado__in=[Reserva.CERRADA, Reserva.CANCELADA]).count()} vigentes", "Lista de reservas con su estado."),
         ("clientes", "Clientes y perros", f"{Cliente.objects.count()} clientes", "Fichas, perros y requisitos sanitarios."),
         ("chat", "Chat", "Asistente del hotel", "Preguntas frecuentes y disponibilidad."),
         ("habitaciones", "Habitaciones", f"{Habitacion.objects.count()} habitaciones", "Lista y tarifa por noche."),
@@ -393,3 +393,80 @@ def usuario_activo(request, usuario_id):
         u.is_active = not u.is_active
         u.save(update_fields=["is_active"])
     return redirect("usuarios")
+
+
+def _puede_gestionar(request, reserva_id):
+    """Personal siempre; un visitante solo sobre las reservas que hizo en su sesión."""
+    return rol(request.user) is not None or reserva_id in request.session.get("reservas_propias", [])
+
+
+@require_POST
+def cancelar(request, reserva_id):
+    if not _puede_gestionar(request, reserva_id):
+        raise PermissionDenied
+    with transaction.atomic():
+        reserva = get_object_or_404(Reserva.objects.select_for_update(), pk=reserva_id)
+        if reserva.estado == Reserva.CONFIRMADA:
+            reserva.estado = Reserva.CANCELADA
+            reserva.cancelada_en = timezone.now()
+            reserva.cancelada_por = request.user if rol(request.user) else None
+            reserva.motivo_cancelacion = request.POST.get("motivo", "").strip()[:200]
+            reserva.save()
+    if rol(request.user):
+        return redirect("reservaciones")
+    return redirect("reserva_confirmada", reserva_id=reserva.pk)
+
+
+@personal
+def editar_reserva(request, reserva_id):
+    hoy = timezone.localdate()
+    with transaction.atomic():
+        reserva = get_object_or_404(Reserva.objects.select_related("habitacion").select_for_update(), pk=reserva_id)
+        if reserva.estado not in (Reserva.CONFIRMADA, Reserva.ACTIVA):
+            return render(request, "hotel/editar.html", {"reserva": reserva, "bloqueado": True,
+                          "error": "Esta reserva ya no se puede editar."}, status=409)
+        solo_salida = reserva.estado == Reserva.ACTIVA  # con el perro en el hotel solo se mueve la salida
+        contexto = {"reserva": reserva, "solo_salida": solo_salida}
+        if request.method == "POST":
+            d = request.POST
+            nueva_entrada = reserva.entrada if solo_salida else _fecha(d.get("entrada", ""))
+            nueva_salida = _fecha(d.get("salida", ""))
+            hab_id = reserva.habitacion_id if solo_salida else d.get("habitacion")
+            nombre = reserva.nombre if solo_salida else d.get("nombre", "").strip()
+            telefono = reserva.telefono if solo_salida else d.get("telefono", "").strip()
+            perro = reserva.perro if solo_salida else d.get("perro", "").strip()[:80]
+            if solo_salida:
+                error = None if nueva_salida and nueva_salida >= hoy and nueva_salida > nueva_entrada else \
+                    "La salida debe ser hoy o después, y posterior a la entrada."
+            else:
+                error = _validar_fechas(nueva_entrada, nueva_salida)
+                if not error and (not nombre or not telefono):
+                    error = "Escriba nombre y teléfono."
+            habitacion = None
+            if not error:
+                habitacion = Habitacion.objects.select_for_update().filter(pk=hab_id).first()
+                if habitacion is None:
+                    error = "Elija una habitación."
+                elif not habitaciones_libres(nueva_entrada, nueva_salida, excluir=reserva.pk).filter(pk=habitacion.pk).exists():
+                    error = "Esa habitación no está libre en esas fechas."
+            if error:
+                contexto.update(error=error, datos=d, libres=_libres_para_editar(reserva, nueva_entrada, nueva_salida))
+                return render(request, "hotel/editar.html", contexto, status=409 if "libre" in error else 400)
+            reserva.habitacion, reserva.entrada, reserva.salida = habitacion, nueva_entrada, nueva_salida
+            reserva.nombre, reserva.telefono = nombre, telefono
+            if perro != reserva.perro and not solo_salida:
+                reserva.perro = perro
+                reserva.perro_ref = None
+                if perro and reserva.cliente:
+                    reserva.perro_ref = reserva.cliente.perros.filter(nombre__iexact=perro).first() or \
+                        Perro.objects.create(cliente=reserva.cliente, nombre=perro)
+            reserva.save()
+            return redirect("reservaciones")
+        contexto["libres"] = _libres_para_editar(reserva, reserva.entrada, reserva.salida)
+    return render(request, "hotel/editar.html", contexto)
+
+
+def _libres_para_editar(reserva, entrada, salida):
+    if not entrada or not salida or salida <= entrada:
+        return [reserva.habitacion]
+    return list(habitaciones_libres(entrada, salida, excluir=reserva.pk))

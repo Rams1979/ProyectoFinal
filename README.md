@@ -15,6 +15,12 @@ Prototipo con datos de ejemplo (no es un sistema para operar el hotel). Django +
 - Contraseñas de 10 o más caracteres, sesión de 12 horas y bloqueo de 15 minutos tras 5 intentos fallidos por usuario.
 - Primer administrador: variables `ADMIN_USERNAME` y `ADMIN_PASSWORD` en Railway; el arranque lo crea una sola vez (`crear_admin`). Luego se pueden quitar las variables.
 
+## Etapa 8: cancelar y editar reservas
+- Cancelar (estado "Cancelada"): libera la habitación, guarda motivo, fecha y quién canceló. Solo reservas confirmadas; con el perro en el hotel se hace check-out.
+- El personal cancela desde Reservaciones; el visitante cancela solo la que hizo en su sesión, desde su confirmación.
+- Editar (solo personal): reserva confirmada permite fechas, habitación, nombre, teléfono y perro; con el perro en el hotel solo se mueve la salida. Revisa disponibilidad sin contarse a sí misma y bloquea la habitación.
+- Reservas cerradas o canceladas no se editan. No hay reactivación: se crea una reserva nueva.
+
 ## Menú principal
 - `/` es el menú con acceso a todas las pantallas y un dato vivo en cada una. La lista de habitaciones pasó a `/habitaciones/`.
 

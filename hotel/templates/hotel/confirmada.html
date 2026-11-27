@@ -1,8 +1,13 @@
 {% extends "hotel/base.html" %}
 {% block contenido %}
-  <h2>Reserva confirmada</h2>
+  <h2>{% if reserva.estado == "cancelada" %}Reserva cancelada{% else %}Reserva confirmada{% endif %}</h2>
   <p>{{ reserva.nombre }} · {{ reserva.telefono }}<br>
     {{ reserva.habitacion }} · {{ reserva.entrada }} a {{ reserva.salida }} · {{ noches }} noche{{ noches|pluralize }}<br>
-    Total ${{ total|floatformat:0 }} · pagada</p>
+    Total ${{ total|floatformat:0 }}{% if reserva.estado != "cancelada" %} · pagada{% endif %}</p>
+  {% if reserva.estado == "cancelada" %}
+    <p>La reserva quedó cancelada y la habitación se liberó. El hotel define la devolución del pago y se comunicará con usted.</p>
+  {% elif reserva.estado == "confirmada" %}
+    <form method="post" action="{% url 'cancelar' reserva.pk %}" onsubmit="return confirm('¿Cancelar esta reserva?')">{% csrf_token %}<button type="submit">Cancelar reserva</button></form>
+  {% endif %}
   <p><a href="{% url 'reservaciones' %}">Ver reservaciones</a> · <a href="{% url 'disponibilidad' %}">Nueva búsqueda</a></p>
 {% endblock %}

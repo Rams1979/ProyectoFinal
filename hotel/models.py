@@ -78,8 +78,8 @@ class Vacuna(models.Model):
 class Reserva(models.Model):
     """Reserva confirmada automáticamente (el prototipo la da por pagada)."""
 
-    CONFIRMADA, ACTIVA, CERRADA = "confirmada", "activa", "cerrada"
-    ESTADOS = [(CONFIRMADA, "Confirmada"), (ACTIVA, "En hotel"), (CERRADA, "Cerrada")]
+    CONFIRMADA, ACTIVA, CERRADA, CANCELADA = "confirmada", "activa", "cerrada", "cancelada"
+    ESTADOS = [(CONFIRMADA, "Confirmada"), (ACTIVA, "En hotel"), (CERRADA, "Cerrada"), (CANCELADA, "Cancelada")]
 
     habitacion = models.ForeignKey(Habitacion, on_delete=models.PROTECT, related_name="reservas")
     nombre = models.CharField(max_length=120)
@@ -94,6 +94,9 @@ class Reserva(models.Model):
     creada_por = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="+")  # vacío si reservó el cliente solo
     checkin_por = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
     checkout_por = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
+    cancelada_en = models.DateTimeField(null=True, blank=True)
+    cancelada_por = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="+")  # vacío si canceló el cliente
+    motivo_cancelacion = models.CharField(max_length=200, blank=True)
     checkin_en = models.DateTimeField(null=True, blank=True)
     checkout_en = models.DateTimeField(null=True, blank=True)
 

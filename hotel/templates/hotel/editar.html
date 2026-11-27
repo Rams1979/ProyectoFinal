@@ -1,0 +1,28 @@
+{% extends "hotel/base.html" %}
+{% block contenido %}
+  <h2>Editar reserva</h2>
+  {% if error %}<p class="error">{{ error }}</p>{% endif %}
+  {% if not bloqueado %}
+  <form class="filtros" method="post">
+    {% csrf_token %}
+    {% if solo_salida %}
+      <p>{{ reserva.nombre }} · perro {{ reserva.perro }} · {{ reserva.habitacion }} · entrada {{ reserva.entrada|date:"d/m/Y" }}<br>
+        <small>El perro ya está en el hotel: solo se puede mover la fecha de salida.</small></p>
+      <label>Salida <input type="date" name="salida" value="{{ datos.salida|default:reserva.salida|date:'Y-m-d' }}" required></label>
+    {% else %}
+      <label>Entrada <input type="date" name="entrada" value="{{ datos.entrada|default:reserva.entrada|date:'Y-m-d' }}" required></label>
+      <label>Salida <input type="date" name="salida" value="{{ datos.salida|default:reserva.salida|date:'Y-m-d' }}" required></label>
+      <label>Habitación
+        <select name="habitacion">
+          {% for h in libres %}<option value="{{ h.pk }}" {% if h.pk == reserva.habitacion_id %}selected{% endif %}>{{ h }}</option>{% endfor %}
+        </select></label>
+      <label>Nombre <input name="nombre" value="{{ datos.nombre|default:reserva.nombre }}" required></label>
+      <label>Teléfono <input name="telefono" value="{{ datos.telefono|default:reserva.telefono }}" required></label>
+      <label>Perro <input name="perro" value="{{ datos.perro|default:reserva.perro }}" maxlength="80"></label>
+    {% endif %}
+    <button type="submit">Guardar cambios</button>
+  </form>
+  <p class="nota">La lista muestra las habitaciones libres para las fechas actuales. Si cambia las fechas y la habitación no está libre, el sistema se lo indica y muestra las libres para las nuevas fechas.</p>
+  {% endif %}
+  <p><a href="{% url 'reservaciones' %}">Volver a reservaciones</a></p>
+{% endblock %}
