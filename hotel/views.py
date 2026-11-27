@@ -10,13 +10,13 @@ from django.conf import settings
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
 from django.db.models import Q, Sum
-from django.http import JsonResponse
+from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
 from .chat import responder as chat_responder
-from . import acceso
+from . import acceso, reportes as rep
 from .disponibilidad import habitaciones_libres
 from .permisos import con_area, es_administrador, personal, puede, rol
 from .models import (AREAS, Articulo, BloqueoHabitacion, Cliente, Habitacion, ItemPlan, Pago, Perfil, PerfilUsuario,
@@ -41,6 +41,7 @@ def inicio(request):
         (None, "chat", "Chat", "Asistente del hotel", "Preguntas frecuentes y disponibilidad."),
         ("habitaciones", "habitaciones", "Habitaciones y tarifas", f"{Habitacion.objects.filter(activa=True).count()} activas", "Tarifa por noche, mantenimiento y altas."),
         ("habitaciones", "articulos", "Artículos y precios", f"{Articulo.objects.filter(activo=True).count()} activos", "Lista de precios de servicios y productos."),
+        ("reportes", "reportes", "Reportes", "Ocupación, ingresos y reservas", "Por período, con exportación a CSV."),
         ("solicitudes", "solicitudes", "Solicitudes de contacto", f"{SolicitudContacto.objects.count()} recibidas", "Datos que dejaron clientes en el chat."),
         ("usuarios", "usuarios", "Usuarios", f"{User.objects.filter(is_active=True).count()} activos", "Crear, editar y desactivar usuarios."),
         ("usuarios", "perfiles", "Perfiles", f"{Perfil.objects.count()} perfiles", "Qué pantallas ve cada perfil."),
@@ -906,3 +907,38 @@ def articulo_editar(request, articulo_id):
             return redirect("articulos")
     return render(request, "hotel/articulo_editar.html", {"a": a, "tipos": Articulo.TIPOS, "error": error, "datos": datos},
                   status=400 if error else 200)
+
+
+# ---------------------------------------------------------------- reportes
+def _periodo(request):
+    hoy = timezone.localdate()
+    por_defecto = rep.rango_por_defecto(hoy)
+    desde = _fecha(request.GET.get("desde", "")) or por_defecto[0]
+    hasta = _fecha(request.GET.get("hasta", "")) or por_defecto[1]
+    return hoy, desde, hasta, rep.validar_rango(desde, hasta)
+
+
+@con_area("reportes")
+def reportes(request):
+    hoy, desde, hasta, error = _periodo(request)
+    contexto = {"hoy": hoy, "desde": desde, "hasta": hasta, "error": error,
+                "proximos": rep.proximos_movimientos(hoy)}
+    if not error:
+        contexto.update(ocup=rep.ocupacion(desde, hasta), ing=rep.ingresos(desde, hasta),
+                        res=rep.reservas_del_periodo(desde, hasta), cp=rep.clientes_y_perros(desde, hasta))
+    return render(request, "hotel/reportes.html", contexto, status=400 if error else 200)
+
+
+@con_area("reportes")
+def reportes_exportar(request, tipo):
+    hoy, desde, hasta, error = _periodo(request)
+    generadores = {"ocupacion": rep.filas_ocupacion, "reservas": rep.filas_reservas, "pagos": rep.filas_pagos}
+    if tipo not in generadores:
+        return HttpResponse("Tipo de reporte desconocido.", status=404)
+    if error:
+        return HttpResponse(error, status=400)
+    encabezados, filas = generadores[tipo](desde, hasta)
+    respuesta = HttpResponse(content_type="text/csv; charset=utf-8")
+    respuesta["Content-Disposition"] = f'attachment; filename="{tipo}_{desde}_{hasta}.csv"'
+    rep.escribir_csv(respuesta, encabezados, filas)
+    return respuesta

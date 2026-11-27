@@ -1085,3 +1085,116 @@ class ArranqueTests(TestCase):
         from .arranque import preparar_administrador
         with mock.patch("hotel.arranque.call_command", side_effect=RuntimeError("sin tablas")):
             preparar_administrador()  # no debe lanzar
+
+
+import csv as _csv
+from io import StringIO as _StringIO
+
+from . import reportes as rep
+
+
+class ReportesTests(TestCase):
+    def setUp(self):
+        self.hoy = timezone.localdate()
+        self.u = entrar(self.client, "Administrador")
+        self.d0 = self.hoy.replace(day=1)
+        h = lambda n: Habitacion.objects.get(numero=n)
+        # A: hab 1, noches d0 y d0+1 (cerrada cuenta); B: hab 2, d0+1 a d0+3; C: cancelada, no cuenta
+        self.a = Reserva.objects.create(habitacion=h(1), nombre="Ana", telefono="1", entrada=self.d0, salida=self.d0 + timedelta(days=2), estado="cerrada")
+        self.b = Reserva.objects.create(habitacion=h(2), nombre="Beto", telefono="2", entrada=self.d0 + timedelta(days=1), salida=self.d0 + timedelta(days=4), creada_por=self.u)
+        self.c = Reserva.objects.create(habitacion=h(3), nombre="Cris", telefono="3", entrada=self.d0, salida=self.d0 + timedelta(days=5), estado="cancelada")
+
+    def test_ocupacion_por_dia(self):
+        o = rep.ocupacion(self.d0, self.d0 + timedelta(days=4))
+        self.assertEqual([d["ocupadas"] for d in o["dias"]], [1, 2, 1, 1, 0])  # la salida no cuenta; la cancelada tampoco
+        self.assertEqual((o["noches"], o["capacidad"], o["pct"]), (5, 30, 3.3))
+        self.assertEqual(o["pico"]["ocupadas"], 2)
+        # un período que corta una reserva solo cuenta sus días dentro
+        o2 = rep.ocupacion(self.d0 + timedelta(days=2), self.d0 + timedelta(days=3))
+        self.assertEqual([d["ocupadas"] for d in o2["dias"]], [1, 1])
+
+    def test_ocupacion_no_cuenta_habitaciones_inactivas_en_la_capacidad(self):
+        Habitacion.objects.filter(numero__gt=20).update(activa=False)
+        self.assertEqual(rep.ocupacion(self.d0, self.d0)["capacidad"], 20)
+
+    def test_ingresos_por_metodo(self):
+        Pago.objects.create(reserva=self.b, monto=Decimal("20"), metodo="sinpe")
+        Pago.objects.create(reserva=self.b, monto=Decimal("30"), metodo="efectivo")
+        Pago.objects.create(reserva=self.b, tipo="devolucion", monto=Decimal("5"), metodo="efectivo")
+        i = rep.ingresos(self.d0, self.d0 + timedelta(days=30))
+        por = {m["etiqueta"]: (m["cobrado"], m["devuelto"], m["neto"]) for m in i["metodos"]}
+        self.assertEqual(por["SINPE"], (Decimal("20"), Decimal("0"), Decimal("20")))
+        self.assertEqual(por["Efectivo"], (Decimal("30"), Decimal("5"), Decimal("25")))
+        self.assertEqual((i["cobrado"], i["devuelto"], i["neto"]), (Decimal("50"), Decimal("5"), Decimal("45")))
+        # fuera del período no entra
+        self.assertEqual(rep.ingresos(self.d0 - timedelta(days=40), self.d0 - timedelta(days=30))["neto"], Decimal("0"))
+
+    def test_reservas_del_periodo(self):
+        Pago.objects.create(reserva=self.b, monto=Decimal("40"), metodo="sinpe")
+        r = rep.reservas_del_periodo(self.d0, self.d0 + timedelta(days=10))
+        self.assertEqual(r["total"], 3)
+        self.assertEqual(dict(r["por_estado"]), {"Confirmada": 1, "En hotel": 0, "Cerrada": 1, "Cancelada": 1})
+        self.assertEqual((r["cancelaciones"], r["tasa_cancelacion"]), (1, 33.3))
+        self.assertEqual(r["reservado"], Decimal("60") + Decimal("90"))  # A (2 noches) + B (3 noches); la cancelada no
+        self.assertEqual((r["pagado"], r["por_cobrar"]), (Decimal("40"), Decimal("110")))
+        self.assertEqual((r["en_linea"], r["por_el_personal"]), (2, 1))
+
+    def test_proximos_movimientos_y_requisitos(self):
+        from .models import Cliente, Perro
+        cli = Cliente.objects.create(nombre="Dora", telefono="9")
+        perro = Perro.objects.create(cliente=cli, nombre="Max")
+        entra = Reserva.objects.create(habitacion=Habitacion.objects.get(numero=5), nombre="Dora", telefono="9", cliente=cli,
+                                       perro_ref=perro, perro="Max", entrada=self.hoy + timedelta(days=2), salida=self.hoy + timedelta(days=4))
+        sale = Reserva.objects.create(habitacion=Habitacion.objects.get(numero=6), nombre="Eli", telefono="8",
+                                      entrada=self.hoy - timedelta(days=1), salida=self.hoy + timedelta(days=1), estado="activa")
+        lejos = Reserva.objects.create(habitacion=Habitacion.objects.get(numero=7), nombre="Fer", telefono="7",
+                                       entrada=self.hoy + timedelta(days=20), salida=self.hoy + timedelta(days=22))
+        p = rep.proximos_movimientos(self.hoy)
+        self.assertEqual([l["r"].pk for l in p["llegadas"]], [entra.pk])
+        self.assertEqual(p["llegadas"][0]["pendientes"], 5)  # ningún requisito registrado
+        self.assertIn(sale.pk, [r.pk for r in p["salidas"]])
+        self.assertNotIn(lejos.pk, [r.pk for r in p["salidas"]])
+
+    def test_pagina_y_filtros(self):
+        r = self.client.get("/reportes/", {"desde": self.d0.isoformat(), "hasta": (self.d0 + timedelta(days=4)).isoformat()})
+        self.assertContains(r, "Ocupación")
+        self.assertContains(r, "noches ocupadas")
+        self.assertContains(r, "Exportar reservas CSV")
+        self.assertEqual(self.client.get("/reportes/").status_code, 200)  # mes en curso por defecto
+        self.assertEqual(self.client.get("/reportes/", {"desde": "2026-05-10", "hasta": "2026-05-01"}).status_code, 400)
+        self.assertContains(self.client.get("/reportes/", {"desde": "2020-01-01", "hasta": "2026-01-01"}), "no puede pasar de", status_code=400)
+
+    def test_exportar_csv_y_proteccion_contra_formulas(self):
+        Reserva.objects.create(habitacion=Habitacion.objects.get(numero=8), nombre="=HYPERLINK(\"http://x\")", telefono="+506",
+                               entrada=self.d0, salida=self.d0 + timedelta(days=1))
+        Pago.objects.create(reserva=self.b, monto=Decimal("12.50"), metodo="tarjeta", referencia="@cmd")
+        q = {"desde": self.d0.isoformat(), "hasta": (self.d0 + timedelta(days=30)).isoformat()}
+        r = self.client.get("/reportes/exportar/reservas/", q)
+        self.assertEqual(r.status_code, 200)
+        self.assertIn("text/csv", r["Content-Type"])
+        self.assertIn("attachment", r["Content-Disposition"])
+        texto = r.content.decode("utf-8")
+        self.assertTrue(texto.startswith("\ufeff"))
+        filas = list(_csv.reader(_StringIO(texto.lstrip("\ufeff"))))
+        self.assertEqual(filas[0][:3], ["id", "habitacion", "cliente"])
+        nombres = [f[2] for f in filas[1:]]
+        self.assertIn("'=HYPERLINK(\"http://x\")", nombres)  # neutralizada
+        self.assertIn("'+506", [f[3] for f in filas[1:]])
+        pagos = list(_csv.reader(_StringIO(self.client.get("/reportes/exportar/pagos/", q).content.decode("utf-8").lstrip("\ufeff"))))
+        self.assertEqual((pagos[1][6], pagos[1][8]), ("12.50", "'@cmd"))  # monto y referencia neutralizada
+        occ = list(_csv.reader(_StringIO(self.client.get("/reportes/exportar/ocupacion/", q).content.decode("utf-8").lstrip("\ufeff"))))
+        self.assertEqual(len(occ), 1 + 31)
+        self.assertEqual(self.client.get("/reportes/exportar/otro/", q).status_code, 404)
+        # fechas ilegibles: se usa el mes en curso, igual que en la página
+        self.assertEqual(self.client.get("/reportes/exportar/pagos/", {"desde": "x", "hasta": "y"}).status_code, 200)
+        self.assertEqual(self.client.get("/reportes/exportar/pagos/", {"desde": q["hasta"], "hasta": q["desde"]}).status_code, 400)
+
+    def test_permisos(self):
+        self.client.post("/salir/")
+        entrar(self.client, "Recepción", "rita")
+        self.assertEqual(self.client.get("/reportes/").status_code, 403)
+        self.assertEqual(self.client.get("/reportes/exportar/pagos/").status_code, 403)
+        Perfil.objects.filter(nombre="Recepción").update(areas=["panel", "reportes"])
+        self.assertEqual(self.client.get("/reportes/").status_code, 200)
+        self.client.post("/salir/")
+        self.assertEqual(self.client.get("/reportes/").status_code, 302)

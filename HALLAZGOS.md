@@ -21,6 +21,8 @@ Resultado de las pruebas del recorrido completo. Lo que el prototipo hace a prop
 - Tarifas: sin historial ni vigencias por fecha o temporada; el cambio rige para reservas nuevas desde que se guarda. El descuento por períodos prolongados no existe.
 - Artículos: es solo la lista de precios; no se asocia a reservas ni a la caja. Todos los precios de servicios quedaron por definir.
 
+- Reportes: la capacidad es el número de habitaciones activas hoy; no descuenta los días de mantenimiento ni cambios históricos de habitaciones. Todo está en dólares y sin impuestos. Un ingreso se cuenta por la fecha en que se registró el pago, y el valor de una reserva por su fecha de entrada, así que ambas cifras no cuadran mes a mes.
+
 ## Decisiones del prototipo (no son errores)
 - Sin registro de clientes ni de perros; la reserva pide nombre y teléfono y el nombre del perro se anota en el check-in.
 - Sin validación de vacunas ni fotos de recepción.

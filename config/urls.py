@@ -37,5 +37,7 @@ urlpatterns = [
     path("cuidado/reserva/<int:reserva_id>/", views.plan_reserva, name="plan_reserva"),
     path("reserva/<int:reserva_id>/pagos/", views.pagos_reserva, name="pagos_reserva"),
     path("caja/", views.caja, name="caja"),
+    path("reportes/", views.reportes, name="reportes"),
+    path("reportes/exportar/<str:tipo>/", views.reportes_exportar, name="reportes_exportar"),
     path("reservaciones/", views.reservaciones, name="reservaciones"),
 ]

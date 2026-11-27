@@ -242,6 +242,7 @@ AREAS = [
     ("clientes", "Clientes y perros"),
     ("cuidado", "Cuidado diario"),
     ("habitaciones", "Habitaciones, tarifas y artículos"),
+    ("reportes", "Reportes y exportación"),
     ("solicitudes", "Solicitudes de contacto"),
     ("usuarios", "Usuarios y perfiles"),
 ]

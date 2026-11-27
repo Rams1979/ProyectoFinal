@@ -1,0 +1,74 @@
+{% extends "hotel/base.html" %}
+{% block contenido %}
+  <h2>Reportes</h2>
+  <form class="filtros" method="get">
+    <label>Desde <input type="date" name="desde" value="{{ desde|date:'Y-m-d' }}" required></label>
+    <label>Hasta <input type="date" name="hasta" value="{{ hasta|date:'Y-m-d' }}" required></label>
+    <button type="submit">Ver período</button>
+  </form>
+  {% if error %}<p class="error">{{ error }}</p>{% endif %}
+
+  <h3>Próximos 7 días ({{ proximos.desde|date:"d/m" }} al {{ proximos.hasta|date:"d/m" }})</h3>
+  <table>
+    <tr><th>Llegadas</th><th>Habitación</th><th>Perros</th><th>Requisitos</th></tr>
+    {% for l in proximos.llegadas %}
+      <tr><td>{{ l.r.entrada|date:"d/m" }} · {{ l.r.nombre }}</td><td>{{ l.r.habitacion }}</td><td>{{ l.r.perros_texto|default:"—" }}</td>
+        <td>{% if l.sin_perro %}Perro sin registrar{% elif l.pendientes %}{{ l.pendientes }} pendiente{{ l.pendientes|pluralize }}{% else %}Al día{% endif %}</td></tr>
+    {% empty %}<tr><td colspan="4">Sin llegadas.</td></tr>{% endfor %}
+  </table>
+  <table>
+    <tr><th>Salidas</th><th>Habitación</th><th>Estado</th></tr>
+    {% for r in proximos.salidas %}
+      <tr><td>{{ r.salida|date:"d/m" }} · {{ r.nombre }}</td><td>{{ r.habitacion }}</td><td>{{ r.get_estado_display }}</td></tr>
+    {% empty %}<tr><td colspan="3">Sin salidas.</td></tr>{% endfor %}
+  </table>
+
+  {% if not error %}
+  <h3>Ocupación</h3>
+  <div class="tarjetas">
+    <div><strong>{{ ocup.pct }} %</strong>ocupación del período</div>
+    <div><strong>{{ ocup.noches }}</strong>noches ocupadas</div>
+    <div><strong>{{ ocup.capacidad }}</strong>habitaciones activas</div>
+    {% if ocup.pico %}<div><strong>{{ ocup.pico.ocupadas }}</strong>máximo en un día ({{ ocup.pico.fecha|date:"d/m" }})</div>{% endif %}
+  </div>
+  <table>
+    <tr><th>Día</th><th>Ocupadas</th><th>Libres</th><th>%</th><th></th></tr>
+    {% for d in ocup.dias %}
+      <tr><td>{{ d.fecha|date:"D d/m" }}</td><td>{{ d.ocupadas }}</td><td>{{ d.libres }}</td><td>{{ d.pct }} %</td>
+        <td><div class="barra"><span style="width: {{ d.pct }}%"></span></div></td></tr>
+    {% endfor %}
+  </table>
+  <p class="nota">La capacidad es el número de habitaciones activas hoy; no descuenta los días de mantenimiento. <a href="{% url 'reportes_exportar' 'ocupacion' %}?desde={{ desde|date:'Y-m-d' }}&hasta={{ hasta|date:'Y-m-d' }}">Exportar CSV</a></p>
+
+  <h3>Ingresos</h3>
+  <div class="tarjetas">
+    <div><strong>${{ ing.neto }}</strong>cobrado neto (cobros − devoluciones)</div>
+    <div><strong>${{ ing.devuelto }}</strong>devuelto</div>
+    <div><strong>${{ res.reservado }}</strong>valor de las reservas con entrada en el período</div>
+    <div><strong>${{ res.por_cobrar }}</strong>por cobrar de esas reservas</div>
+  </div>
+  <table>
+    <tr><th>Método</th><th>Cobrado</th><th>Devuelto</th><th>Neto</th></tr>
+    {% for m in ing.metodos %}<tr><td>{{ m.etiqueta }}</td><td>${{ m.cobrado }}</td><td>${{ m.devuelto }}</td><td>${{ m.neto }}</td></tr>{% endfor %}
+  </table>
+  <p class="nota">Lo cobrado se cuenta por la fecha en que se registró el pago, y el valor de las reservas por su fecha de entrada. <a href="{% url 'reportes_exportar' 'pagos' %}?desde={{ desde|date:'Y-m-d' }}&hasta={{ hasta|date:'Y-m-d' }}">Exportar pagos CSV</a></p>
+
+  <h3>Reservas con entrada en el período</h3>
+  <div class="tarjetas">
+    <div><strong>{{ res.total }}</strong>reservas</div>
+    {% for etiqueta, n in res.por_estado %}<div><strong>{{ n }}</strong>{{ etiqueta|lower }}</div>{% endfor %}
+    <div><strong>{{ res.tasa_cancelacion }} %</strong>tasa de cancelación</div>
+    <div><strong>{{ res.en_linea }}</strong>hechas por el cliente en línea</div>
+    <div><strong>{{ res.por_el_personal }}</strong>hechas por el personal</div>
+    <div><strong>{{ cp.clientes_nuevos }}</strong>clientes nuevos</div>
+    <div><strong>{{ cp.perros_alojados }}</strong>perros alojados</div>
+  </div>
+  <table>
+    <tr><th>Entrada</th><th>Cliente</th><th>Habitación</th><th>Total</th><th>Pagado</th><th>Estado</th></tr>
+    {% for f in res.filas %}
+      <tr><td>{{ f.r.entrada|date:"d/m" }}</td><td>{{ f.r.nombre }}</td><td>{{ f.r.habitacion }}</td><td>${{ f.total }}</td><td>${{ f.pagado }}</td><td>{{ f.r.get_estado_display }}</td></tr>
+    {% empty %}<tr><td colspan="6">Sin reservas en el período.</td></tr>{% endfor %}
+  </table>
+  <p class="nota"><a href="{% url 'reportes_exportar' 'reservas' %}?desde={{ desde|date:'Y-m-d' }}&hasta={{ hasta|date:'Y-m-d' }}">Exportar reservas CSV</a></p>
+  {% endif %}
+{% endblock %}
