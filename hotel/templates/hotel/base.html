@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700&family=Shippori+Mincho:wght@500;700;800&display=swap">
   <style>
-    :root { --bg:#fff; --ink:#16241B; --muted:#55645A; --moss:#1F4D36; --leaf:#7FA77A; --tint:#E3ECDD; --line:#D3DECD; --seal:#B8402B;
+    :root { --bg:#FEEED3; --ink:#16241B; --muted:#55645A; --moss:#1F4D36; --leaf:#7FA77A; --tint:#E3ECDD; --line:#D3DECD; --seal:#B8402B;
             --font-display:"Shippori Mincho","Hiragino Mincho ProN","Yu Mincho",Georgia,serif; --font-body:"Hanken Grotesk","Segoe UI",system-ui,sans-serif; }
     * { box-sizing: border-box; }
     body { font-family: var(--font-body); font-size: 16px; line-height: 1.55; margin: 0; color: var(--ink); background: var(--bg); }
@@ -19,7 +19,7 @@
     :focus-visible { outline: 3px solid var(--seal); outline-offset: 3px; border-radius: 4px; }
     .wrap { max-width: 1120px; margin-inline: auto; padding: 0 16px; }
     main.wrap { padding-top: 1rem; padding-bottom: 3rem; }
-    .topbar { position: sticky; top: 0; z-index: 30; background: rgba(255,255,255,.92); backdrop-filter: blur(8px); border-bottom: 1px solid var(--line); }
+    .topbar { position: sticky; top: 0; z-index: 30; background: rgba(254,238,211,.94); backdrop-filter: blur(8px); border-bottom: 1px solid var(--line); }
     .topbar-in { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; padding-block: 10px; }
     .brand { display: flex; align-items: center; gap: 12px; text-decoration: none; color: var(--ink); margin-right: auto; }
     .brand b { font-family: var(--font-display); font-size: 26px; font-weight: 800; line-height: 1.05; }
@@ -28,7 +28,7 @@
     nav.nav a { text-decoration: none; font-size: 15px; font-weight: 500; padding: 8px 12px; border-radius: 14px; color: var(--muted); white-space: nowrap; }
     nav.nav a:hover { background: var(--tint); color: var(--ink); }
     .logo-mini { height: 52px; width: auto; border-radius: 6px; }
-    .logo-grande { float: right; margin: .25rem 0 .5rem 1rem; max-width: 34%; max-height: 150px; width: auto; height: auto; }
+    .logo-grande { mix-blend-mode: multiply; float: right; margin: .25rem 0 .5rem 1rem; max-width: 34%; max-height: 150px; width: auto; height: auto; }
     main.wrap::after { content: ""; display: block; clear: both; }
     .nota { color: var(--muted); font-size: .9rem; margin-top: 0; }
     .error { color: var(--seal); font-weight: 600; }
@@ -50,6 +50,7 @@
     .yo { align-self: flex-end; background: var(--moss); color: #fff; }
     .bot { align-self: flex-start; background: var(--tint); }
     .panel { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: .6rem; list-style: none; padding: 0; }
+    .panel li, .menu a, ul.lista li, .tarjetas div { background-color: rgba(255,255,255,.55); }
     .panel li { border: 2px solid var(--line); border-radius: 10px; padding: .55rem .7rem; font-size: .9rem; display: flex; flex-direction: column; gap: .25rem; }
     .panel li.ocupada { border-color: var(--moss); background: var(--tint); }
     .panel li.llega { border-color: #b26a00; background: #fff4e0; }
