@@ -7,7 +7,7 @@
   <table>
     <tr><th>Hora</th><th>Tarea</th><th></th></tr>
     {% for i in items %}
-      <tr><td>{{ i.hora|time:"H:i"|default:"—" }}</td><td>{{ i.get_tipo_display }}{% if i.detalle %}: {{ i.detalle }}{% endif %}</td>
+      <tr><td>{{ i.hora|time:"h:i A"|default:"—" }}</td><td>{{ i.get_tipo_display }}{% if i.detalle %}: {{ i.detalle }}{% endif %}</td>
         <td><form class="en-linea" method="post">{% csrf_token %}<input type="hidden" name="accion" value="quitar"><input type="hidden" name="item_id" value="{{ i.pk }}"><button class="chico" type="submit">Quitar</button></form></td></tr>
     {% endfor %}
   </table>

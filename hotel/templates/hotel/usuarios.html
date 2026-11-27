@@ -6,7 +6,7 @@
     <tr><th>Usuario</th><th>Nombre</th><th>Perfil</th><th>Estado</th><th>Último ingreso</th><th></th></tr>
     {% for f in filas %}
       <tr><td>{{ f.u.username }}</td><td>{{ f.u.first_name }}</td><td>{{ f.rol }}</td><td>{% if f.u.is_active %}Activo{% else %}Desactivado{% endif %}</td>
-        <td>{{ f.u.last_login|date:"d/m/Y H:i"|default:"—" }}</td>
+        <td>{{ f.u.last_login|date:"d/m/Y h:i A"|default:"—" }}</td>
         <td><a href="{% url 'usuario_editar' f.u.pk %}">Editar</a></td></tr>
     {% endfor %}
   </table>

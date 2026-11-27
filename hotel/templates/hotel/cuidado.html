@@ -7,9 +7,9 @@
       <strong>Alertas para el encargado ({{ alertas.total }})</strong>
       <ul>
         {% for r in alertas.sin_comer %}<li>{{ r.habitacion }} · {{ r.perros_texto }}: lleva 2 días seguidos sin comer.</li>{% endfor %}
-        {% for r, i in alertas.sin_servir %}<li>{{ r.habitacion }} · {{ i.hora|time:"H:i" }}: toma sin servir ({{ i.detalle }}).</li>{% endfor %}
-        {% for r, i in alertas.sin_verificar %}<li>{{ r.habitacion }} · {{ i.hora|time:"H:i" }}: falta verificar cuánto comió.</li>{% endfor %}
-        {% for r, i in alertas.medicinas %}<li>{{ r.habitacion }} · {{ i.hora|time:"H:i" }}: medicina sin registrar ({{ i.detalle }}).</li>{% endfor %}
+        {% for r, i in alertas.sin_servir %}<li>{{ r.habitacion }} · {{ i.hora|time:"h:i A" }}: toma sin servir ({{ i.detalle }}).</li>{% endfor %}
+        {% for r, i in alertas.sin_verificar %}<li>{{ r.habitacion }} · {{ i.hora|time:"h:i A" }}: falta verificar cuánto comió.</li>{% endfor %}
+        {% for r, i in alertas.medicinas %}<li>{{ r.habitacion }} · {{ i.hora|time:"h:i A" }}: medicina sin registrar ({{ i.detalle }}).</li>{% endfor %}
       </ul>
     </div>
   {% endif %}
@@ -23,7 +23,7 @@
       {% for par in f.tareas %}
         {% with t=par.tarea i=par.item %}
         <tr class="{% if t.hecha and i.tipo != 'alimentacion' or t.consumo %}hecha{% endif %}">
-          <td>{{ i.hora|time:"H:i"|default:"—" }}</td>
+          <td>{{ i.hora|time:"h:i A"|default:"—" }}</td>
           <td>{{ i.get_tipo_display }}{% if i.detalle %}: {{ i.detalle }}{% endif %}</td>
           <td>
             {% if i.tipo == "alimentacion" %}
@@ -33,9 +33,9 @@
                   <input name="porcion_motivo" maxlength="250" placeholder="Motivo si la porción difiere">
                   <button class="chico" type="submit">Servida</button></form>
               {% else %}
-                Servida {{ t.hecha_en|time:"H:i" }} · {{ t.hecha_por.username|default:"" }}{% if t.porcion_motivo %} · porción distinta: {{ t.porcion_motivo }}{% endif %}<br>
+                Servida {{ t.hecha_en|time:"h:i A" }} · {{ t.hecha_por.username|default:"" }}{% if t.porcion_motivo %} · porción distinta: {{ t.porcion_motivo }}{% endif %}<br>
                 {% if t.consumo %}
-                  Consumo: <strong>{{ t.get_consumo_display }}</strong> {{ t.consumo_en|time:"H:i" }}{% if t.observaciones %} · {{ t.observaciones }}{% endif %}
+                  Consumo: <strong>{{ t.get_consumo_display }}</strong> {{ t.consumo_en|time:"h:i A" }}{% if t.observaciones %} · {{ t.observaciones }}{% endif %}
                 {% else %}
                   <form class="en-linea" method="post" action="{% url 'tarea_consumo' t.pk %}">{% csrf_token %}
                     <select name="consumo">{% for k, e in consumos %}<option value="{{ k }}">{{ e }}</option>{% endfor %}</select>
@@ -50,12 +50,12 @@
                   <input name="observaciones" maxlength="250" placeholder="Observaciones (obligatorias si no se administró)">
                   <button class="chico" type="submit">Registrar</button></form>
               {% else %}
-                <strong>{{ t.get_resultado_display }}</strong> {{ t.hecha_en|time:"H:i" }} · {{ t.hecha_por.username|default:"" }}{% if t.observaciones %} · {{ t.observaciones }}{% endif %}
+                <strong>{{ t.get_resultado_display }}</strong> {{ t.hecha_en|time:"h:i A" }} · {{ t.hecha_por.username|default:"" }}{% if t.observaciones %} · {{ t.observaciones }}{% endif %}
               {% endif %}
             {% else %}
               <form class="en-linea" method="post" action="{% url 'tarea_hecha' t.pk %}">{% csrf_token %}
                 <button class="chico" type="submit">{% if t.hecha %}Deshacer{% else %}Marcar hecha{% endif %}</button></form>
-              {% if t.hecha %}<small>{{ t.hecha_por.username|default:"" }} {{ t.hecha_en|time:"H:i" }}</small>{% endif %}
+              {% if t.hecha %}<small>{{ t.hecha_por.username|default:"" }} {{ t.hecha_en|time:"h:i A" }}</small>{% endif %}
             {% endif %}
             {% if t.hecha and i.tipo != "paseo" and i.tipo != "limpieza" and i.tipo != "otro" %}
               <form class="en-linea" method="post" action="{% url 'tarea_hecha' t.pk %}">{% csrf_token %}<button class="chico" type="submit">Deshacer</button></form>

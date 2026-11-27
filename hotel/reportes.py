@@ -145,6 +145,6 @@ def filas_reservas(desde, hasta):
 def filas_pagos(desde, hasta):
     datos = ingresos(desde, hasta)
     return (["fecha", "hora", "reserva", "habitacion", "cliente", "tipo", "monto", "metodo", "referencia", "registro"],
-            [[timezone.localtime(p.creado).date().isoformat(), timezone.localtime(p.creado).strftime("%H:%M"), p.reserva_id,
+            [[timezone.localtime(p.creado).date().isoformat(), timezone.localtime(p.creado).strftime("%I:%M %p"), p.reserva_id,
               p.reserva.habitacion.numero, p.reserva.nombre, p.get_tipo_display(), p.monto, p.get_metodo_display(),
               p.referencia, p.registrado_por.username if p.registrado_por else ""] for p in datos["pagos"]])
