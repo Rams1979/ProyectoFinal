@@ -1067,3 +1067,21 @@ class CrearAdminTests(TestCase):
 
     def test_sin_variables_avisa_y_no_falla(self):
         self.assertIn("faltan ADMIN_USERNAME", self._correr())
+
+
+class ArranqueTests(TestCase):
+    def test_prepara_el_administrador_al_arrancar(self):
+        import os
+        from .arranque import preparar_administrador
+        os.environ.update(ADMIN_USERNAME="admin-prueba", ADMIN_PASSWORD="clave-ficticia-uno-1")
+        try:
+            preparar_administrador()
+        finally:
+            os.environ.pop("ADMIN_USERNAME"); os.environ.pop("ADMIN_PASSWORD")
+        self.assertEqual(self.client.post("/ingresar/", {"username": "admin-prueba", "password": "clave-ficticia-uno-1"}).status_code, 302)
+
+    def test_un_error_no_detiene_el_arranque(self):
+        from unittest import mock
+        from .arranque import preparar_administrador
+        with mock.patch("hotel.arranque.call_command", side_effect=RuntimeError("sin tablas")):
+            preparar_administrador()  # no debe lanzar
