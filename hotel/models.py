@@ -18,6 +18,13 @@ class Habitacion(models.Model):
         ordering = ["numero"]
         verbose_name_plural = "habitaciones"
 
+    PESOS = {"pequena": "Hasta 10 kg", "mediana": "Hasta 25 kg", "grande": "Desde 25 kg (admite gigantes)"}
+
+    @property
+    def peso_recomendado(self):
+        """Peso aproximado del perro para el que está pensada, según la clasificación del documento del caso de uso."""
+        return self.PESOS[self.tamano]
+
     def __str__(self):
         return f"Habitación {self.numero:02d}"
 

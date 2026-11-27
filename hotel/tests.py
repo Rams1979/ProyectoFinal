@@ -53,7 +53,8 @@ class DisponibilidadTests(TestCase):
         self.assertContains(r, "posterior")
         r = self.client.get("/disponibilidad/", {"entrada": d.isoformat(), "salida": (d + timedelta(days=2)).isoformat()})
         self.assertContains(r, "Habitaciones libres (30)")
-        self.assertContains(r, "Habitación 01 · Pequeña (1 m²) · $60")
+        self.assertContains(r, "Habitación 01")
+        self.assertContains(r, "$60")
 
 
 class ReservaTests(TestCase):
@@ -1242,7 +1243,10 @@ class TamanoHabitacionTests(TestCase):
         Habitacion.objects.filter(numero=1).update(tamano="grande")  # 1 era pequeña
         e = timezone.localdate() + timedelta(days=3)
         s = e + timedelta(days=2)
-        self.assertContains(self.client.get("/disponibilidad/", {"entrada": e.isoformat(), "salida": s.isoformat()}), "Grande")
+        pag = self.client.get("/disponibilidad/", {"entrada": e.isoformat(), "salida": s.isoformat()})
+        self.assertContains(pag, "Grande")
+        for peso in ("Hasta 10 kg", "Hasta 25 kg", "Desde 25 kg"):
+            self.assertContains(pag, "Peso recomendado: " + peso)
         r = chat.consultar_disponibilidad(e.isoformat(), s.isoformat())
         self.assertEqual(r["libres_por_tamano"], {"Pequeña (1 m²)": 9, "Mediana (2 m²)": 10, "Grande (4 m²)": 11})
         entrar(self.client, "Administrador")

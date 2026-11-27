@@ -3,7 +3,7 @@
   <h2>Reservar</h2>
   {% if error %}<p class="error">{{ error }}</p>{% endif %}
   {% if habitacion %}
-    <p><strong>{{ habitacion }} · {{ habitacion.get_tamano_display }}</strong><br>
+    <p><strong>{{ habitacion }} · {{ habitacion.get_tamano_display }}</strong><br>Peso recomendado del perro: {{ habitacion.peso_recomendado }}<br>
       Entrada {{ entrada_txt }} · Salida {{ salida_txt }} · {{ noches }} noche{{ noches|pluralize }}<br>
       Total ${{ total|floatformat:0 }}{% if perro2 %} (incluye segundo perro){% endif %}</p>
     {% if not bloqueado %}
