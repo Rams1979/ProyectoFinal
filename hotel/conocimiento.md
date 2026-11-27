@@ -45,12 +45,18 @@ Los requisitos específicos los establece el hotel con su veterinario (POR DEFIN
 - La disponibilidad real se consulta por fechas en la página de disponibilidad; ahí también se reserva.
 - En el prototipo la reserva queda confirmada al reservar en la página. El chat no crea ni confirma reservas.
 
-## Políticas POR DEFINIR
-- Horario de recepción, hora de dejar y de recoger, domingos y feriados, llegada tarde, cambios de fecha.
-- Condiciones de admisión: cachorros, edad mínima, perros no castrados, hembras en celo, perros agresivos,
-  razas, restricciones de tamaño o peso, perros con tratamientos médicos.
+## Horario de atención
+- El hotel atiende las 24 horas, todos los días (24/7).
+- Las horas concretas para dejar y recoger al perro, los domingos y feriados, la llegada tarde y los cambios de fecha: POR DEFINIR.
+
+## Admisión
+- No se admiten perros peligrosos, como los de tipo Pitbull o de pelea.
+- Cachorros, edad mínima, perros no castrados, hembras en celo, otras razas, restricciones de tamaño o peso y perros con tratamientos médicos: POR DEFINIR.
+
+## Otras políticas POR DEFINIR
 - Visitas durante la estadía, fotos y videos, supervisión nocturna, convivencia entre perros.
 
-## Contacto POR DEFINIR
-Nombre del hotel, teléfono, WhatsApp, correo, dirección, ubicación en Google Maps, horario de atención,
-página web, Facebook e Instagram.
+## Contacto
+- Se puede contactar al hotel por WhatsApp, correo electrónico y teléfono.
+- Los números y direcciones concretos (teléfono, WhatsApp, correo), el nombre del hotel, la dirección, la ubicación en Google Maps,
+  la página web, Facebook e Instagram: POR DEFINIR. Mientras tanto, el chat toma nombre y teléfono del cliente para que la persona de turno lo contacte.
