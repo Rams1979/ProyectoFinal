@@ -8,6 +8,14 @@
     <label>Contraseña actual <input type="password" name="actual" autocomplete="current-password" required></label>
     <label>Contraseña nueva (mínimo 10 caracteres) <input type="password" name="nueva" autocomplete="new-password" required></label>
     <label>Repita la contraseña nueva <input type="password" name="repite" autocomplete="new-password" required></label>
+    <label class="fila"><span><input type="checkbox" id="ver-clave"> Mostrar lo que escribo</span></label>
     <button type="submit">Cambiar</button>
   </form>
+  <script>
+    document.getElementById("ver-clave").addEventListener("change", function () {
+      document.querySelectorAll('input[name="actual"], input[name="nueva"], input[name="repite"]').forEach(function (i) {
+        i.type = this.checked ? "text" : "password";
+      }, this);
+    });
+  </script>
 {% endblock %}

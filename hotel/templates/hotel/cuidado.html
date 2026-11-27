@@ -2,19 +2,67 @@
 {% block contenido %}
   <h2>Cuidado diario · {{ hoy|date:"d/m/Y" }}</h2>
   <p><strong>{{ pendientes }}</strong> tarea{{ pendientes|pluralize }} pendiente{{ pendientes|pluralize }} de {{ filas|length }} habitación{{ filas|length|pluralize:",es" }} con perros.</p>
+  {% if alertas.total %}
+    <div class="aviso">
+      <strong>Alertas para el encargado ({{ alertas.total }})</strong>
+      <ul>
+        {% for r in alertas.sin_comer %}<li>{{ r.habitacion }} · {{ r.perros_texto }}: lleva 2 días seguidos sin comer.</li>{% endfor %}
+        {% for r, i in alertas.sin_servir %}<li>{{ r.habitacion }} · {{ i.hora|time:"H:i" }}: toma sin servir ({{ i.detalle }}).</li>{% endfor %}
+        {% for r, i in alertas.sin_verificar %}<li>{{ r.habitacion }} · {{ i.hora|time:"H:i" }}: falta verificar cuánto comió.</li>{% endfor %}
+        {% for r, i in alertas.medicinas %}<li>{{ r.habitacion }} · {{ i.hora|time:"H:i" }}: medicina sin registrar ({{ i.detalle }}).</li>{% endfor %}
+      </ul>
+    </div>
+  {% endif %}
   {% for f in filas %}
-    <h3>{{ f.reserva.habitacion }} · {{ f.reserva.perros_texto }} <small>({{ f.reserva.nombre }})</small></h3>
-    {% for nombre, nota in f.notas %}<p class="aviso">Cuidados de {{ nombre }}: {{ nota }}</p>{% endfor %}
+    <h3>{{ f.reserva.habitacion }} · {{ f.reserva.perros_texto }} <small>({{ f.reserva.nombre }})</small>
+      {% if f.reserva.perro_ref %}<small><a href="{% url 'perro' f.reserva.perro_ref.pk %}">Ficha</a></small>{% endif %}
+      {% if f.reserva.perro2_ref %}<small><a href="{% url 'perro' f.reserva.perro2_ref.pk %}">Ficha 2</a></small>{% endif %}</h3>
+    {% for nombre, nota in f.notas %}<p class="aviso"><strong>{{ nombre }}:</strong> {{ nota }}</p>{% endfor %}
     <table>
-      <tr><th>Hora</th><th>Tarea</th><th>Estado</th></tr>
+      <tr><th>Hora</th><th>Tarea</th><th>Registro</th></tr>
       {% for par in f.tareas %}
-        <tr class="{% if par.tarea.hecha %}hecha{% endif %}">
-          <td>{{ par.item.hora|time:"H:i"|default:"—" }}</td>
-          <td>{{ par.item.get_tipo_display }}{% if par.item.detalle %}: {{ par.item.detalle }}{% endif %}</td>
-          <td><form class="en-linea" method="post" action="{% url 'tarea_hecha' par.tarea.pk %}">{% csrf_token %}
-            <button class="chico" type="submit">{% if par.tarea.hecha %}Deshacer{% else %}Marcar hecha{% endif %}</button></form>
-            {% if par.tarea.hecha %}<small>{{ par.tarea.hecha_por.username|default:"" }} {{ par.tarea.hecha_en|time:"H:i" }}</small>{% endif %}</td>
+        {% with t=par.tarea i=par.item %}
+        <tr class="{% if t.hecha and i.tipo != 'alimentacion' or t.consumo %}hecha{% endif %}">
+          <td>{{ i.hora|time:"H:i"|default:"—" }}</td>
+          <td>{{ i.get_tipo_display }}{% if i.detalle %}: {{ i.detalle }}{% endif %}</td>
+          <td>
+            {% if i.tipo == "alimentacion" %}
+              {% if not t.hecha %}
+                <form class="en-linea" method="post" action="{% url 'tarea_servida' t.pk %}">{% csrf_token %}
+                  <label><input type="checkbox" name="porcion_distinta" value="1"> Porción distinta al plan</label>
+                  <input name="porcion_motivo" maxlength="250" placeholder="Motivo si la porción difiere">
+                  <button class="chico" type="submit">Servida</button></form>
+              {% else %}
+                Servida {{ t.hecha_en|time:"H:i" }} · {{ t.hecha_por.username|default:"" }}{% if t.porcion_motivo %} · porción distinta: {{ t.porcion_motivo }}{% endif %}<br>
+                {% if t.consumo %}
+                  Consumo: <strong>{{ t.get_consumo_display }}</strong> {{ t.consumo_en|time:"H:i" }}{% if t.observaciones %} · {{ t.observaciones }}{% endif %}
+                {% else %}
+                  <form class="en-linea" method="post" action="{% url 'tarea_consumo' t.pk %}">{% csrf_token %}
+                    <select name="consumo">{% for k, e in consumos %}<option value="{{ k }}">{{ e }}</option>{% endfor %}</select>
+                    <input name="observaciones" maxlength="250" placeholder="Observación (obligatoria si fue parte o nada)">
+                    <button class="chico" type="submit">Registrar consumo</button></form>
+                {% endif %}
+              {% endif %}
+            {% elif i.tipo == "medicacion" %}
+              {% if not t.hecha %}
+                <form class="en-linea" method="post" action="{% url 'tarea_resultado' t.pk %}">{% csrf_token %}
+                  <select name="resultado">{% for k, e in resultados %}<option value="{{ k }}">{{ e }}</option>{% endfor %}</select>
+                  <input name="observaciones" maxlength="250" placeholder="Observaciones (obligatorias si no se administró)">
+                  <button class="chico" type="submit">Registrar</button></form>
+              {% else %}
+                <strong>{{ t.get_resultado_display }}</strong> {{ t.hecha_en|time:"H:i" }} · {{ t.hecha_por.username|default:"" }}{% if t.observaciones %} · {{ t.observaciones }}{% endif %}
+              {% endif %}
+            {% else %}
+              <form class="en-linea" method="post" action="{% url 'tarea_hecha' t.pk %}">{% csrf_token %}
+                <button class="chico" type="submit">{% if t.hecha %}Deshacer{% else %}Marcar hecha{% endif %}</button></form>
+              {% if t.hecha %}<small>{{ t.hecha_por.username|default:"" }} {{ t.hecha_en|time:"H:i" }}</small>{% endif %}
+            {% endif %}
+            {% if t.hecha and i.tipo != "paseo" and i.tipo != "limpieza" and i.tipo != "otro" %}
+              <form class="en-linea" method="post" action="{% url 'tarea_hecha' t.pk %}">{% csrf_token %}<button class="chico" type="submit">Deshacer</button></form>
+            {% endif %}
+          </td>
         </tr>
+        {% endwith %}
       {% endfor %}
     </table>
     <p><a href="{% url 'plan_reserva' f.reserva.pk %}">Editar plan de cuidado</a></p>

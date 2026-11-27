@@ -55,6 +55,20 @@ def con_area(area):
     return decorador
 
 
+def con_alguna_area(*areas):
+    """Exige sesión y que el perfil tenga al menos una de las áreas."""
+    def decorador(vista):
+        @wraps(vista)
+        def envoltura(request, *args, **kwargs):
+            if not request.user.is_authenticated:
+                return redirect_to_login(request.get_full_path())
+            if not any(puede(request.user, a) for a in areas):
+                raise PermissionDenied
+            return vista(request, *args, **kwargs)
+        return envoltura
+    return decorador
+
+
 def personal(vista):
     """Cualquier usuario con perfil (para pantallas comunes, como cambiar la contraseña)."""
     @wraps(vista)

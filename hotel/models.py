@@ -327,17 +327,28 @@ class ItemPlan(models.Model):
     tipo = models.CharField(max_length=14, choices=TIPOS)
     detalle = models.CharField(max_length=200, blank=True)
     hora = models.TimeField(null=True, blank=True)
+    hasta = models.DateField(null=True, blank=True)  # última fecha en que rige (medicación con fin); vacío = toda la estancia
 
     class Meta:
         ordering = ["hora", "pk"]
 
 
 class Tarea(models.Model):
+    """Tarea de un día. Alimentación: servida y consumo (CU-06). Medicación: resultado de la administración (CU-07)."""
+
+    CONSUMOS = [("todo", "Todo"), ("parte", "Parte"), ("nada", "Nada")]
+    RESULTADOS = [("administrada", "Administrada"), ("rechazada", "Rechazada"), ("no_administrada", "No administrada")]
     item = models.ForeignKey(ItemPlan, on_delete=models.CASCADE, related_name="tareas")
     fecha = models.DateField()
     hecha = models.BooleanField(default=False)
     hecha_por = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
-    hecha_en = models.DateTimeField(null=True, blank=True)
+    hecha_en = models.DateTimeField(null=True, blank=True)  # en alimentación: cuándo se sirvió; en medicación: cuándo se registró
+    porcion_motivo = models.CharField(max_length=250, blank=True)  # solo si la porción servida difiere del plan
+    consumo = models.CharField(max_length=5, choices=CONSUMOS, blank=True)
+    consumo_en = models.DateTimeField(null=True, blank=True)
+    consumo_por = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
+    resultado = models.CharField(max_length=16, choices=RESULTADOS, blank=True)
+    observaciones = models.CharField(max_length=250, blank=True)
 
     class Meta:
         constraints = [models.UniqueConstraint(fields=["item", "fecha"], name="una_tarea_por_dia")]

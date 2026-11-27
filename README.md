@@ -108,3 +108,5 @@ pip install -r requirements.txt
 python manage.py migrate
 python manage.py runserver
 ```
+
+- Cuidado diario: tomas en dos pasos (servida y consumo), medicinas con resultado, alertas para el encargado y ficha del perro en solo lectura para el cuidador. En «Cambiar contraseña» hay una casilla para ver lo escrito.

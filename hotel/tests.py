@@ -574,7 +574,7 @@ class CuidadoTests(TestCase):
     def test_marcar_hecha_y_deshacer(self):
         self._checkin()
         self.client.get("/cuidado/")
-        t = Tarea.objects.first()
+        t = Tarea.objects.get(item__tipo="paseo")
         self.client.post(f"/cuidado/tarea/{t.pk}/hecha/")
         t.refresh_from_db()
         self.assertEqual((t.hecha, t.hecha_por), (True, self.u))
@@ -1438,7 +1438,13 @@ class FichasCompletasTests(TestCase):
         self.assertContains(self.client.get(f"/clientes/{self.cli.pk}/"), f"/perros/{self.perro.pk}/")
         self.client.post("/salir/")
         entrar(self.client, "Cuidador", "cuco")
-        self.assertEqual(self.client.get(f"/perros/{self.perro.pk}/").status_code, 403)
+        pagina = self.client.get(f"/perros/{self.perro.pk}/")
+        self.assertEqual(pagina.status_code, 200)  # el cuidador consulta la ficha
+        self.assertNotContains(pagina, "Editar ficha")
+        self.assertNotContains(pagina, 'name="accion" value="medicacion"')
+        self.assertEqual(self.client.post(f"/perros/{self.perro.pk}/", {"accion": "necesidad", "tipo": "medica", "detalle": "x"}).status_code, 403)
+        self.assertEqual(self.client.get(f"/perros/{self.perro.pk}/editar/").status_code, 403)
+        self.assertEqual(self.client.get(f"/clientes/{self.cli.pk}/").status_code, 403)
 
     def test_capacidad_de_la_habitacion_y_segundo_perro(self):
         from .models import Habitacion
@@ -1491,3 +1497,136 @@ class FichasCompletasTests(TestCase):
         pagina = self.client.get("/articulos/")
         self.assertContains(pagina, "Habitación")
         self.assertContains(pagina, "Grande (25 a 45 kg)")
+
+
+class RegistroDiarioTests(TestCase):
+    def setUp(self):
+        from .models import Cliente, Medicacion, NecesidadEspecial, Perro, PlanAlimentacion
+        self.hoy = timezone.localdate()
+        self.u = entrar(self.client, "Administrador")
+        c = Cliente.objects.create(nombre="Ana", telefono="1")
+        self.perro = Perro.objects.create(cliente=c, nombre="Rocky", alergias="Pollo", restricciones_premios="Sin galletas", come_separado=True)
+        NecesidadEspecial.objects.create(perro=self.perro, tipo="movilidad", detalle="No sube escalones")
+        PlanAlimentacion.objects.create(perro=self.perro, alimento="Pro Plan", cantidad_toma="200 g", tomas_dia=2, horarios="6:30 y 18:00",
+                                        desde=self.hoy - timedelta(days=1), restricciones="Sin pollo")
+        Medicacion.objects.create(perro=self.perro, medicamento="Carprofeno", dosis="1 tableta", via="pastilla", horario="cada 12 h",
+                                  con_comida="con", hasta=self.hoy + timedelta(days=5))
+        Medicacion.objects.create(perro=self.perro, medicamento="Suspendida", activa=False)
+        self.res = Reserva.objects.create(habitacion=Habitacion.objects.get(numero=1), nombre="Ana", telefono="1", cliente=c, perro_ref=self.perro,
+                                          perro="Rocky", entrada=self.hoy, salida=self.hoy + timedelta(days=3))
+        self.client.post(f"/checkin/{self.res.pk}/", {"autoriza": "1"})
+        self.client.get("/cuidado/")
+
+    def tarea(self, tipo, indice=0):
+        return list(Tarea.objects.filter(item__tipo=tipo, fecha=self.hoy).order_by("item__hora"))[indice]
+
+    def test_el_plan_sale_de_la_ficha_del_perro(self):
+        items = list(self.res.plan.all())
+        comidas = [i for i in items if i.tipo == "alimentacion"]
+        self.assertEqual([i.hora.strftime("%H:%M") for i in comidas], ["06:30", "18:00"])
+        self.assertIn("Rocky: Pro Plan 200 g (toma 1 de 2)", comidas[0].detalle)
+        meds = [i for i in items if i.tipo == "medicacion"]
+        self.assertEqual([i.hora.strftime("%H:%M") for i in meds], ["08:00", "20:00"])  # cada 12 h
+        self.assertTrue(all("Carprofeno" in i.detalle and i.hasta for i in meds))
+        self.assertFalse(any("Suspendida" in i.detalle for i in items))
+        self.assertEqual(len([i for i in items if i.tipo in ("paseo", "limpieza")]), 2)
+        self.assertEqual(len(items), 6)  # sin desayuno ni cena genéricos porque hay plan
+        pagina = self.client.get("/cuidado/")
+        for texto in ("Alergias: Pollo", "Restricciones: Sin galletas", "Debe comer separado", "Movilidad: No sube escalones"):
+            self.assertContains(pagina, texto)
+
+    def test_toma_servida_y_consumo_en_dos_pasos(self):
+        t = self.tarea("alimentacion")
+        url = lambda paso: f"/cuidado/tarea/{t.pk}/{paso}/"
+        self.client.post(url("consumo"), {"consumo": "todo"})  # sin servida no se puede
+        t.refresh_from_db()
+        self.assertEqual(t.consumo, "")
+        self.client.post(url("servida"), {"porcion_distinta": "1", "porcion_motivo": ""})  # motivo obligatorio
+        t.refresh_from_db()
+        self.assertFalse(t.hecha)
+        self.client.post(url("servida"), {"porcion_distinta": "1", "porcion_motivo": "Tiene poco apetito"})
+        t.refresh_from_db()
+        self.assertEqual((t.hecha, t.hecha_por, t.porcion_motivo), (True, self.u, "Tiene poco apetito"))
+        self.client.post(url("consumo"), {"consumo": "parte", "observaciones": ""})  # parte exige observación
+        t.refresh_from_db()
+        self.assertEqual(t.consumo, "")
+        self.client.post(url("consumo"), {"consumo": "parte", "observaciones": "Comió la mitad"})
+        t.refresh_from_db()
+        self.assertEqual((t.consumo, t.observaciones, t.consumo_por), ("parte", "Comió la mitad", self.u))
+        self.assertContains(self.client.get("/cuidado/"), "Comió la mitad")
+        self.client.post(f"/cuidado/tarea/{t.pk}/hecha/")  # deshacer borra todo el registro
+        t.refresh_from_db()
+        self.assertEqual((t.hecha, t.consumo, t.observaciones, t.porcion_motivo), (False, "", "", ""))
+
+    def test_no_se_marca_hecha_una_toma_ni_una_medicina_sin_su_paso(self):
+        for tipo in ("alimentacion", "medicacion"):
+            t = self.tarea(tipo)
+            self.client.post(f"/cuidado/tarea/{t.pk}/hecha/")
+            t.refresh_from_db()
+            self.assertFalse(t.hecha)
+        # y cada paso solo vale para su tipo de tarea
+        paseo = Tarea.objects.get(item__tipo="paseo")
+        self.assertEqual(self.client.post(f"/cuidado/tarea/{paseo.pk}/servida/", {}).status_code, 403)
+
+    def test_administracion_de_medicina(self):
+        t = self.tarea("medicacion")
+        url = f"/cuidado/tarea/{t.pk}/resultado/"
+        self.client.post(url, {"resultado": "rechazada", "observaciones": ""})
+        t.refresh_from_db()
+        self.assertFalse(t.hecha)
+        self.client.post(url, {"resultado": "otro"})
+        t.refresh_from_db()
+        self.assertFalse(t.hecha)
+        self.client.post(url, {"resultado": "rechazada", "observaciones": "Escupió la pastilla"})
+        t.refresh_from_db()
+        self.assertEqual((t.hecha, t.resultado, t.hecha_por, t.observaciones), (True, "rechazada", self.u, "Escupió la pastilla"))
+        self.assertContains(self.client.get("/cuidado/"), "Rechazada")
+        t2 = self.tarea("medicacion", 1)
+        self.client.post(f"/cuidado/tarea/{t2.pk}/resultado/", {"resultado": "administrada"})
+        t2.refresh_from_db()
+        self.assertEqual((t2.hecha, t2.resultado), (True, "administrada"))
+
+    def test_alertas_de_tomas_medicinas_y_dos_dias_sin_comer(self):
+        from datetime import time as hora
+        from . import views
+        ahora = timezone.now()
+        filas = views._tareas_de_hoy(self.hoy)
+        a = views._alertas(self.hoy, ahora, filas)
+        self.assertEqual(a["sin_comer"], [])
+        # una toma servida hace más de una hora sin consumo verificado
+        t = self.tarea("alimentacion")
+        Tarea.objects.filter(pk=t.pk).update(hecha=True, hecha_en=ahora - timedelta(hours=2))
+        filas = views._tareas_de_hoy(self.hoy)
+        a = views._alertas(self.hoy, ahora, filas)
+        self.assertEqual(len(a["sin_verificar"]), 1)
+        # tomas y medicinas que ya tocaban y no se registraron: se fuerza la hora al pasado
+        ItemPlan.objects.filter(reserva=self.res, tipo__in=["alimentacion", "medicacion"]).update(hora=hora(0, 1))
+        Tarea.objects.filter(pk=t.pk).update(hecha=False, hecha_en=None)
+        a = views._alertas(self.hoy, ahora, views._tareas_de_hoy(self.hoy))
+        self.assertEqual((len(a["sin_servir"]), len(a["medicinas"])), (2, 2))
+        self.assertContains(self.client.get("/cuidado/"), "Alertas para el encargado")
+        # dos días seguidos con consumo "nada" en todas las tomas
+        for tarea in Tarea.objects.filter(item__tipo="alimentacion", fecha=self.hoy):
+            Tarea.objects.filter(pk=tarea.pk).update(hecha=True, consumo="nada")
+            Tarea.objects.create(item=tarea.item, fecha=self.hoy - timedelta(days=1), hecha=True, consumo="nada")
+        a = views._alertas(self.hoy, ahora, views._tareas_de_hoy(self.hoy))
+        self.assertEqual([r.pk for r in a["sin_comer"]], [self.res.pk])
+        self.assertContains(self.client.get("/cuidado/"), "2 días seguidos sin comer")
+        Tarea.objects.filter(item__tipo="alimentacion", fecha=self.hoy).update(consumo="todo")
+        self.assertEqual(views._alertas(self.hoy, ahora, views._tareas_de_hoy(self.hoy))["sin_comer"], [])
+
+    def test_el_cuidador_registra_y_ve_la_ficha_desde_cuidado(self):
+        self.client.post("/salir/")
+        entrar(self.client, "Cuidador", "cuco")
+        t = self.tarea("alimentacion")
+        self.assertEqual(self.client.post(f"/cuidado/tarea/{t.pk}/servida/", {}).status_code, 302)
+        t.refresh_from_db()
+        self.assertTrue(t.hecha)
+        self.assertEqual(t.hecha_por.username, "cuco")
+        self.assertContains(self.client.get("/cuidado/"), f"/perros/{self.perro.pk}/")
+        self.assertEqual(self.client.get(f"/perros/{self.perro.pk}/").status_code, 200)
+
+    def test_cambio_de_clave_muestra_opcion_para_ver_lo_escrito(self):
+        pagina = self.client.get("/clave/")
+        self.assertContains(pagina, "Mostrar lo que escribo")
+        self.assertContains(pagina, 'id="ver-clave"')

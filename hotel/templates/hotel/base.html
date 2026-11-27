@@ -93,6 +93,7 @@
 </div></header>
 <main class="wrap">
   <img class="logo-grande" src="{% static logo %}" alt="Inu no Hoteru 犬のホテル, hotel para perros">
+  {% for m in messages %}<p class="{% if m.tags == 'error' %}error{% else %}aviso{% endif %}">{{ m }}</p>{% endfor %}
   {% block contenido %}{% endblock %}
 </main>
 <footer class="pie"><div class="wrap">Prototipo conceptual con datos de ejemplo.</div></footer>

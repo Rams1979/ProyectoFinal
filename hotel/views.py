@@ -1,7 +1,9 @@
 import json
+import re
 from datetime import date, time, timedelta
 from decimal import Decimal, InvalidOperation
 
+from django.contrib import messages
 from django.contrib.auth import authenticate, login, logout, update_session_auth_hash
 from django.contrib.auth.forms import AuthenticationForm
 from django.contrib.auth.models import Group, User
@@ -20,7 +22,7 @@ from django.views.decorators.http import require_POST
 from .chat import responder as chat_responder
 from . import acceso, reportes as rep
 from .disponibilidad import habitaciones_libres
-from .permisos import con_area, es_administrador, personal, puede, rol
+from .permisos import con_alguna_area, con_area, es_administrador, personal, puede, rol
 from .models import (AREAS, Articulo, BloqueoHabitacion, Cliente, Habitacion, ItemPlan, Medicacion, NecesidadEspecial, PlanAlimentacion, Pago, Perfil, PerfilUsuario,
                      Perro, Reserva, SolicitudContacto, Tarea, Vacuna)
 
@@ -543,12 +545,15 @@ def perro_editar(request, perro_id):
     return render(request, "hotel/perro_editar.html", {"p": p, "grupos": grupos, "error": error}, status=400 if error else 200)
 
 
-@con_area("clientes")
+@con_alguna_area("clientes", "cuidado")
 def perro(request, perro_id):
     p = get_object_or_404(Perro.objects.select_related("cliente").prefetch_related("vacunas", "medicaciones", "necesidades", "planes"), pk=perro_id)
     hoy = timezone.localdate()
     error = None
+    edita = puede(request.user, "clientes")  # el cuidador solo consulta la ficha
     if request.method == "POST":
+        if not edita:
+            raise PermissionDenied
         accion = request.POST.get("accion")
         if accion == "medicacion":
             v, error = _leer_campos(request.POST, Medicacion, ["medicamento", "dosis", "via", "horario", "desde", "hasta", "con_comida",
@@ -591,7 +596,7 @@ def perro(request, perro_id):
             return redirect("perro", perro_id=p.pk)
     planes = list(p.planes.all())
     vigente = next((x for x in planes if x.desde <= hoy and (x.hasta is None or x.hasta >= hoy)), None)
-    contexto = {"p": p, "hoy": hoy, "error": error, "datos": request.POST if error else {},
+    contexto = {"p": p, "hoy": hoy, "error": error, "datos": request.POST if error else {}, "edita": edita,
                 "requisitos": p.requisitos(hoy), "planes": planes, "plan_vigente": vigente,
                 "vias": Medicacion.VIAS, "comidas": Medicacion.COMIDA, "origenes": Medicacion.ORIGENES, "necesidades_tipos": NecesidadEspecial.TIPOS}
     grupos = []
@@ -908,47 +913,208 @@ PLAN_BASE = [
 ]
 
 
+HORAS_POR_DEFECTO = {1: [time(7, 0)], 2: [time(7, 0), time(17, 0)], 3: [time(7, 0), time(12, 0), time(17, 0)]}
+
+
+def _horas(texto, n):
+    """Horas de un texto como «7:00 y 17:00»; si no trae, reparte n tomas entre las 7:00 y las 19:00."""
+    horas = sorted({time(int(h), int(m)) for h, m in re.findall(r"(\d{1,2}):(\d{2})", texto or "") if int(h) < 24 and int(m) < 60})
+    if horas:
+        return horas
+    if n in HORAS_POR_DEFECTO:
+        return HORAS_POR_DEFECTO[n]
+    return [time(7 + round(12 * i / (n - 1)), 0) for i in range(n)] if n > 1 else [time(7, 0)]
+
+
+def _horas_medicina(texto):
+    """«cada 8 h» reparte las dosis desde las 8:00; también acepta horas escritas. Sin dato, una sola tarea sin hora."""
+    m = re.search(r"cada\s+(\d{1,2})\s*h", (texto or "").lower())
+    if m and 1 <= int(m.group(1)) <= 24:
+        paso = int(m.group(1))
+        return [time(h, 0) for h in range(8, 8 + 24, paso) if h < 24] or [time(8, 0)]
+    return _horas(texto, 0) if re.search(r"\d{1,2}:\d{2}", texto or "") else [None]
+
+
 def crear_plan_base(reserva):
-    """Plan mínimo al hacer el check-in; el personal agrega medicación y cuidados especiales."""
-    if not reserva.plan.exists():
-        ItemPlan.objects.bulk_create([ItemPlan(reserva=reserva, tipo=t, detalle=d, hora=h) for t, d, h in PLAN_BASE])
+    """Plan al hacer el check-in: paseo y limpieza, las tomas del plan de alimentación de cada perro (o desayuno y cena si
+    no tiene plan) y su medicación activa. El personal puede ajustarlo después."""
+    if reserva.plan.exists():
+        return
+    hoy = timezone.localdate()
+    items, con_plan = [], False
+    for perro in (reserva.perro_ref, reserva.perro2_ref):
+        if perro is None:
+            continue
+        plan = next((x for x in perro.planes.all() if x.desde <= hoy and (x.hasta is None or x.hasta >= hoy)), None)
+        if plan:
+            con_plan = True
+            horas = _horas(plan.horarios, plan.tomas_dia)
+            extra = f" · {plan.restricciones}" if plan.restricciones else ""
+            for i, h in enumerate(horas, 1):
+                items.append(ItemPlan(reserva=reserva, tipo="alimentacion", hora=h,
+                                      detalle=f"{perro.nombre}: {plan.alimento} {plan.cantidad_toma} (toma {i} de {len(horas)}){extra}".strip()[:200]))
+        for m in perro.medicaciones.filter(activa=True):
+            if m.hasta and m.hasta < hoy:
+                continue
+            via = f" {m.get_via_display().lower()}" if m.via else ""
+            for h in _horas_medicina(m.horario):
+                items.append(ItemPlan(reserva=reserva, tipo="medicacion", hora=h, hasta=m.hasta,
+                                      detalle=f"{perro.nombre}: {m.medicamento} {m.dosis}{via} · {m.get_con_comida_display().lower()}".strip()[:200]))
+    base = [(t, d, h) for t, d, h in PLAN_BASE if not (con_plan and t == "alimentacion")]
+    items = [ItemPlan(reserva=reserva, tipo=t, detalle=d, hora=h) for t, d, h in base] + items
+    ItemPlan.objects.bulk_create(items)
 
 
 def _tareas_de_hoy(hoy):
     """Crea las tareas de hoy que falten y devuelve, por estancia activa, su lista ordenada."""
     reservas = list(Reserva.objects.filter(estado=Reserva.ACTIVA).select_related("habitacion", "perro_ref", "perro2_ref")
-                    .prefetch_related("plan").order_by("habitacion__numero"))
+                    .prefetch_related("plan", "perro_ref__necesidades", "perro2_ref__necesidades").order_by("habitacion__numero"))
     existentes = {(t.item_id): t for t in Tarea.objects.filter(fecha=hoy, item__reserva__in=reservas).select_related("hecha_por")}
-    nuevas = [Tarea(item=i, fecha=hoy) for r in reservas for i in r.plan.all() if i.pk not in existentes]
+    nuevas = [Tarea(item=i, fecha=hoy) for r in reservas for i in r.plan.all() if i.pk not in existentes and (i.hasta is None or i.hasta >= hoy)]
     if nuevas:
         Tarea.objects.bulk_create(nuevas, ignore_conflicts=True)
         existentes = {t.item_id: t for t in Tarea.objects.filter(fecha=hoy, item__reserva__in=reservas).select_related("hecha_por")}
     filas = []
     for r in reservas:
-        pares = sorted(((i, existentes[i.pk]) for i in r.plan.all() if i.pk in existentes),
+        pares = sorted(((i, existentes[i.pk]) for i in r.plan.all() if i.pk in existentes and (i.hasta is None or i.hasta >= hoy)),
                        key=lambda par: (par[0].hora is None, par[0].hora or time(0), par[0].pk))
         tareas = [{"item": i, "tarea": t} for i, t in pares]
-        notas = [(ref.nombre, ref.notas) for ref in (r.perro_ref, r.perro2_ref) if ref and ref.notas]
+        notas = []
+        for ref in (r.perro_ref, r.perro2_ref):
+            if ref is None:
+                continue
+            if ref.notas:
+                notas.append((ref.nombre, ref.notas))
+            if ref.alergias:
+                notas.append((ref.nombre, "Alergias: " + ref.alergias))
+            if ref.restricciones_premios:
+                notas.append((ref.nombre, "Restricciones: " + ref.restricciones_premios))
+            if ref.come_separado:
+                notas.append((ref.nombre, "Debe comer separado de otros perros"))
+            notas.extend((ref.nombre, n.get_tipo_display() + ": " + n.detalle) for n in ref.necesidades.all() if n.activa)
         filas.append({"reserva": r, "tareas": tareas, "notas": notas,
                       "pendientes": sum(1 for _, t in pares if not t.hecha)})
     return filas
+
+
+def _alertas(hoy, ahora, filas):
+    """Pendientes para el encargado: tomas sin servir, consumos sin verificar, medicinas atrasadas y perros sin comer 2 días."""
+    sin_servir, sin_verificar, medicinas, sin_comer = [], [], [], []
+    for f in filas:
+        for par in f["tareas"]:
+            i, t = par["item"], par["tarea"]
+            ya_toco = i.hora is not None and i.hora <= timezone.localtime(ahora).time()
+            if i.tipo == "alimentacion":
+                if not t.hecha and ya_toco:
+                    sin_servir.append((f["reserva"], i))
+                elif t.hecha and not t.consumo and t.hecha_en and ahora - t.hecha_en >= timedelta(hours=1):
+                    sin_verificar.append((f["reserva"], i))
+            elif i.tipo == "medicacion" and not t.hecha and ya_toco:
+                medicinas.append((f["reserva"], i))
+        ayer = hoy - timedelta(days=1)
+        for dia in (hoy, ayer):
+            consumos = [t.consumo for t in Tarea.objects.filter(item__reserva=f["reserva"], item__tipo="alimentacion", fecha=dia)]
+            if not consumos or any(c != "nada" for c in consumos):
+                break
+        else:
+            sin_comer.append(f["reserva"])
+    return {"sin_servir": sin_servir, "sin_verificar": sin_verificar, "medicinas": medicinas, "sin_comer": sin_comer,
+            "total": len(sin_servir) + len(sin_verificar) + len(medicinas) + len(sin_comer)}
 
 
 @con_area("cuidado")
 def cuidado(request):
     hoy = timezone.localdate()
     filas = _tareas_de_hoy(hoy)
-    return render(request, "hotel/cuidado.html", {"filas": filas, "hoy": hoy,
-                                                  "pendientes": sum(f["pendientes"] for f in filas)})
+    return render(request, "hotel/cuidado.html", {"filas": filas, "hoy": hoy, "alertas": _alertas(hoy, timezone.now(), filas),
+                                                  "pendientes": sum(f["pendientes"] for f in filas),
+                                                  "consumos": Tarea.CONSUMOS, "resultados": Tarea.RESULTADOS,
+                                                  "ve_clientes": puede(request.user, "clientes")})
+
+
+def _tarea_para_registrar(tarea_id, tipo):
+    t = get_object_or_404(Tarea.objects.select_for_update().select_related("item__reserva"), pk=tarea_id)
+    if t.item.tipo != tipo or t.item.reserva.estado != Reserva.ACTIVA:
+        raise PermissionDenied
+    return t
+
+
+def _volver_a_cuidado(request, error=None):
+    if error:
+        messages.error(request, error)
+    return redirect("cuidado")
 
 
 @con_area("cuidado")
 @require_POST
 def tarea_hecha(request, tarea_id):
+    """Marca o deshace una tarea simple (paseo, limpieza, otras). Alimentación y medicación se registran con sus propios pasos."""
     with transaction.atomic():
-        t = get_object_or_404(Tarea.objects.select_for_update(), pk=tarea_id)
+        t = get_object_or_404(Tarea.objects.select_for_update().select_related("item"), pk=tarea_id)
+        if not t.hecha and t.item.tipo in ("alimentacion", "medicacion"):
+            return _volver_a_cuidado(request, "Esa tarea se registra con su propio paso (servida o resultado).")
         t.hecha = not t.hecha
-        t.hecha_por, t.hecha_en = (request.user, timezone.now()) if t.hecha else (None, None)
+        if t.hecha:
+            t.hecha_por, t.hecha_en = request.user, timezone.now()
+        else:  # deshacer borra también los pasos del registro
+            t.hecha_por = t.hecha_en = t.consumo_en = t.consumo_por = None
+            t.porcion_motivo = t.consumo = t.resultado = t.observaciones = ""
+        t.save()
+    return redirect("cuidado")
+
+
+@con_area("cuidado")
+@require_POST
+def tarea_servida(request, tarea_id):
+    """Paso 1 de la toma: el cuidador confirma que puso la comida; si la porción difiere del plan, anota el motivo."""
+    with transaction.atomic():
+        t = _tarea_para_registrar(tarea_id, "alimentacion")
+        distinta = request.POST.get("porcion_distinta") == "1"
+        motivo = request.POST.get("porcion_motivo", "").strip()[:250]
+        if t.hecha:
+            return _volver_a_cuidado(request)
+        if distinta and not motivo:
+            return _volver_a_cuidado(request, "Si la porción difiere del plan, escriba el motivo.")
+        t.hecha, t.hecha_por, t.hecha_en = True, request.user, timezone.now()
+        t.porcion_motivo = motivo if distinta else ""
+        t.save()
+    return redirect("cuidado")
+
+
+@con_area("cuidado")
+@require_POST
+def tarea_consumo(request, tarea_id):
+    """Paso 2 de la toma: se verifica el consumo (todo, parte o nada); parte y nada exigen una observación."""
+    with transaction.atomic():
+        t = _tarea_para_registrar(tarea_id, "alimentacion")
+        consumo = request.POST.get("consumo", "")
+        obs = request.POST.get("observaciones", "").strip()[:250]
+        if not t.hecha:
+            return _volver_a_cuidado(request, "Primero confirme que la comida fue servida.")
+        if consumo not in dict(Tarea.CONSUMOS):
+            return _volver_a_cuidado(request, "Elija cuánto comió: todo, parte o nada.")
+        if consumo != "todo" and not obs:
+            return _volver_a_cuidado(request, "Si comió parte o nada, escriba una observación.")
+        t.consumo, t.consumo_en, t.consumo_por, t.observaciones = consumo, timezone.now(), request.user, obs
+        t.save()
+    return redirect("cuidado")
+
+
+@con_area("cuidado")
+@require_POST
+def tarea_resultado(request, tarea_id):
+    """Registro de la administración de una medicina: resultado, hora real y quién la dio."""
+    with transaction.atomic():
+        t = _tarea_para_registrar(tarea_id, "medicacion")
+        resultado = request.POST.get("resultado", "")
+        obs = request.POST.get("observaciones", "").strip()[:250]
+        if t.hecha:
+            return _volver_a_cuidado(request)
+        if resultado not in dict(Tarea.RESULTADOS):
+            return _volver_a_cuidado(request, "Elija el resultado: administrada, rechazada o no administrada.")
+        if resultado != "administrada" and not obs:
+            return _volver_a_cuidado(request, "Si no se administró, escriba el motivo en las observaciones.")
+        t.hecha, t.hecha_por, t.hecha_en, t.resultado, t.observaciones = True, request.user, timezone.now(), resultado, obs
         t.save()
     return redirect("cuidado")
 
