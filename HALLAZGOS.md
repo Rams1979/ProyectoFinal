@@ -3,7 +3,6 @@
 Resultado de las pruebas del recorrido completo. Lo que el prototipo hace a propósito sin resolver, y lo que se vio al probar.
 
 ## Decisiones del prototipo (no son errores)
-- Sin inicio de sesión: `/reservaciones/` y `/solicitudes/` las ve cualquiera con el enlace, con nombres y teléfonos.
 - Sin registro de clientes ni de perros; la reserva pide nombre y teléfono y el nombre del perro se anota en el check-in.
 - Sin validación de vacunas ni fotos de recepción.
 - Todas las habitaciones son iguales (pequeñas, $30 por noche); la tarifa es un valor de ejemplo en la base.
