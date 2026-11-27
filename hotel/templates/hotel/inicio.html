@@ -1,5 +1,7 @@
 {% extends "hotel/base.html" %}
+{% load static %}
 {% block contenido %}
+  <img class="logo-grande" src="{% static logo %}" alt="Inu no Hoteru 犬のホテル, hotel para perros">
   <h2>Menú principal · {{ hoy|date:"d/m/Y" }}</h2>
   <ul class="menu">
     {% for nombre, titulo, dato, descripcion in menu %}

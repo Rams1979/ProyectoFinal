@@ -1,4 +1,4 @@
-<!doctype html>
+{% load static %}<!doctype html>
 <html lang="es">
 <head>
   <meta charset="utf-8">
@@ -27,6 +27,8 @@
     nav.nav { display: flex; flex-wrap: wrap; align-items: center; gap: 2px; }
     nav.nav a { text-decoration: none; font-size: 15px; font-weight: 500; padding: 8px 12px; border-radius: 14px; color: var(--muted); white-space: nowrap; }
     nav.nav a:hover { background: var(--tint); color: var(--ink); }
+    .logo-mini { height: 52px; width: auto; border-radius: 6px; }
+    .logo-grande { display: block; margin: .5rem auto 1rem; width: min(100%, 420px); height: auto; }
     .nota { color: var(--muted); font-size: .9rem; margin-top: 0; }
     .error { color: var(--seal); font-weight: 600; }
     ul.lista { list-style: none; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: .6rem; }
@@ -73,7 +75,7 @@
 </head>
 <body>
 <header class="topbar"><div class="wrap topbar-in">
-  <a class="brand" href="{% url 'inicio' %}" aria-label="Inu no Hoteru, inicio"><b>Inu no Hoteru</b><span>犬のホテル</span></a>
+  <a class="brand" href="{% url 'inicio' %}" aria-label="Inu no Hoteru, inicio"><img src="{% static logo %}" alt="" class="logo-mini"><b>Inu no Hoteru</b><span>犬のホテル</span></a>
   <nav class="nav">
     {% if rol %}
       <a href="{% url 'inicio' %}">Menú</a><a href="{% url 'disponibilidad' %}">Disponibilidad</a>{% if "panel" in areas %}<a href="{% url 'panel' %}">Panel</a>{% endif %}{% if "reservas" in areas %}<a href="{% url 'reservaciones' %}">Reservaciones</a>{% endif %}{% if "cuidado" in areas %}<a href="{% url 'cuidado' %}">Cuidado</a>{% endif %}{% if "caja" in areas %}<a href="{% url 'caja' %}">Caja</a>{% endif %}{% if "clientes" in areas %}<a href="{% url 'clientes' %}">Clientes</a>{% endif %}<a href="{% url 'chat' %}">Chat</a>{% if "habitaciones" in areas %}<a href="{% url 'habitaciones' %}">Habitaciones</a><a href="{% url 'articulos' %}">Artículos</a>{% endif %}{% if "reportes" in areas %}<a href="{% url 'reportes' %}">Reportes</a>{% endif %}{% if "solicitudes" in areas %}<a href="{% url 'solicitudes' %}">Solicitudes</a>{% endif %}{% if "usuarios" in areas %}<a href="{% url 'usuarios' %}">Usuarios</a><a href="{% url 'perfiles' %}">Perfiles</a>{% endif %}

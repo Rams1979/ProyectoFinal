@@ -1198,3 +1198,20 @@ class ReportesTests(TestCase):
         self.assertEqual(self.client.get("/reportes/").status_code, 200)
         self.client.post("/salir/")
         self.assertEqual(self.client.get("/reportes/").status_code, 302)
+
+
+class LogosTests(TestCase):
+    def test_logo_aleatorio_en_publico_y_personal_y_se_sirve(self):
+        import re
+        r = self.client.get("/")
+        self.assertEqual(r.status_code, 200)
+        urls = set(re.findall(r'src="(/static/hotel/logos/logo-\d\.webp)"', r.content.decode()))
+        self.assertEqual(len(urls), 1)  # el mismo logo en la cabecera y en el grande
+        vistos = set()
+        for _ in range(40):
+            vistos |= set(re.findall(r'logos/(logo-\d)\.webp', self.client.get("/").content.decode()))
+        self.assertGreater(len(vistos), 1)  # varía entre visitas
+        entrar(self.client, "Administrador")
+        self.assertContains(self.client.get("/"), "logos/logo-")
+        for n in range(1, 6):
+            self.assertEqual(self.client.get(f"/static/hotel/logos/logo-{n}.webp").status_code, 200)

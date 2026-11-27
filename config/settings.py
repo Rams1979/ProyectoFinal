@@ -62,6 +62,8 @@ USE_TZ = True
 
 STATIC_URL = "static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
+# Railway no ejecuta collectstatic: WhiteNoise sirve los logos directo desde hotel/static.
+WHITENOISE_USE_FINDERS = True
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # Inicio de sesión del personal (recepción y administrador).
