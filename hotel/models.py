@@ -1,5 +1,8 @@
+from decimal import Decimal
+
 from django.conf import settings
 from django.db import models
+from django.db.models import Sum
 
 
 class Habitacion(models.Model):
@@ -91,6 +94,8 @@ class Reserva(models.Model):
     cliente = models.ForeignKey(Cliente, null=True, blank=True, on_delete=models.PROTECT, related_name="reservas")
     perro_ref = models.ForeignKey(Perro, null=True, blank=True, on_delete=models.PROTECT, related_name="reservas")
     perro = models.CharField(max_length=80, blank=True)  # nombre; si no vino en la reserva se pide en el check-in
+    perro2 = models.CharField(max_length=80, blank=True)  # segundo perro en la misma habitación (+50 %)
+    perro2_ref = models.ForeignKey(Perro, null=True, blank=True, on_delete=models.PROTECT, related_name="reservas_como_segundo")
     creada_por = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="+")  # vacío si reservó el cliente solo
     checkin_por = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
     checkout_por = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
@@ -106,6 +111,52 @@ class Reserva(models.Model):
     def __str__(self):
         return f"{self.habitacion} {self.entrada} a {self.salida}"
 
+    @property
+    def noches(self):
+        return (self.salida - self.entrada).days
+
+    @property
+    def total(self):
+        """Habitación × noches; el segundo perro suma el recargo sobre la tarifa de la habitación."""
+        base = self.habitacion.tarifa_noche * self.noches
+        if self.perro2:
+            base += base * Decimal(settings.RECARGO_SEGUNDO_PERRO) / 100
+        return base
+
+    @property
+    def perros_texto(self):
+        if self.perro and self.perro2:
+            return f"perros {self.perro} y {self.perro2}"
+        if self.perro or self.perro2:
+            return f"perro {self.perro or self.perro2}"
+        return ""
+
+    @property
+    def pagado(self):
+        """Pagos menos devoluciones."""
+        pagos = self.pagos.aggregate(
+            p=Sum("monto", filter=models.Q(tipo=Pago.PAGO)), d=Sum("monto", filter=models.Q(tipo=Pago.DEVOLUCION)))
+        return (pagos["p"] or Decimal("0")) - (pagos["d"] or Decimal("0"))
+
+    @property
+    def saldo(self):
+        return Decimal("0") if self.estado == self.CANCELADA else self.total - self.pagado
+
+    @property
+    def anticipo_requerido(self):
+        return (self.total * settings.ANTICIPO_PORCENTAJE / 100).quantize(Decimal("0.01"))
+
+    @property
+    def estado_pago(self):
+        pagado = self.pagado
+        if self.estado == self.CANCELADA:
+            return "Devolución por definir" if pagado > 0 else "Sin pagos"
+        if pagado <= 0:
+            return "Pendiente"
+        if pagado < self.total:
+            return "Parcial"
+        return "Pagada" if pagado == self.total else "Saldo a favor del cliente"
+
 
 class SolicitudContacto(models.Model):
     """Datos que deja un cliente en el chat para que la persona de turno lo contacte."""
@@ -118,3 +169,47 @@ class SolicitudContacto(models.Model):
     class Meta:
         ordering = ["-creada"]
         verbose_name_plural = "solicitudes de contacto"
+
+
+class Pago(models.Model):
+    """Pago o devolución registrado por el personal (no hay cobro en línea)."""
+
+    PAGO, DEVOLUCION = "pago", "devolucion"
+    TIPOS = [(PAGO, "Pago"), (DEVOLUCION, "Devolución")]
+    METODOS = [("efectivo", "Efectivo"), ("sinpe", "SINPE"), ("tarjeta", "Tarjeta")]
+
+    reserva = models.ForeignKey(Reserva, on_delete=models.PROTECT, related_name="pagos")
+    tipo = models.CharField(max_length=10, choices=TIPOS, default=PAGO)
+    monto = models.DecimalField(max_digits=8, decimal_places=2)
+    metodo = models.CharField(max_length=10, choices=METODOS)
+    referencia = models.CharField(max_length=60, blank=True)  # n.º de SINPE, aprobación de tarjeta, motivo
+    creado = models.DateTimeField(auto_now_add=True)
+    registrado_por = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
+
+    class Meta:
+        ordering = ["-creado"]
+
+
+class ItemPlan(models.Model):
+    """Tarea que se repite cada día mientras el perro está en el hotel."""
+
+    TIPOS = [("alimentacion", "Alimentación"), ("medicacion", "Medicación"), ("paseo", "Paseo"),
+             ("limpieza", "Limpieza"), ("otro", "Otro")]
+    reserva = models.ForeignKey(Reserva, on_delete=models.CASCADE, related_name="plan")
+    tipo = models.CharField(max_length=14, choices=TIPOS)
+    detalle = models.CharField(max_length=200, blank=True)
+    hora = models.TimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["hora", "pk"]
+
+
+class Tarea(models.Model):
+    item = models.ForeignKey(ItemPlan, on_delete=models.CASCADE, related_name="tareas")
+    fecha = models.DateField()
+    hecha = models.BooleanField(default=False)
+    hecha_por = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
+    hecha_en = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["item", "fecha"], name="una_tarea_por_dia")]

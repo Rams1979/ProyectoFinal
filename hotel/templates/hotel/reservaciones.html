@@ -2,13 +2,13 @@
 {% block contenido %}
   <h2>Reservaciones ({{ filas|length }})</h2>
   <table>
-    <tr><th>Cliente</th><th>Habitación</th><th>Entrada</th><th>Salida</th><th>Total</th><th>Estado</th><th>Atendió</th><th></th></tr>
+    <tr><th>Cliente</th><th>Habitación</th><th>Entrada</th><th>Salida</th><th>Total</th><th>Pago</th><th>Estado</th><th>Atendió</th><th></th></tr>
     {% for r, noches, total in filas %}
-      <tr><td>{{ r.nombre }}{% if r.perro %} · perro {{ r.perro }}{% endif %}<br><small>{{ r.telefono }}</small></td><td>{{ r.habitacion }}</td><td>{{ r.entrada|date:"d/m/Y" }}</td><td>{{ r.salida|date:"d/m/Y" }}</td><td>${{ total|floatformat:0 }}</td><td>{{ r.get_estado_display }}{% if r.motivo_cancelacion %}<br><small>{{ r.motivo_cancelacion }}</small>{% endif %}</td><td><small>{% if r.creada_por %}Reservó {{ r.creada_por.username }}{% else %}Reservó el cliente{% endif %}{% if r.checkin_por %}<br>Check-in {{ r.checkin_por.username }}{% endif %}{% if r.checkout_por %}<br>Check-out {{ r.checkout_por.username }}{% endif %}{% if r.estado == "cancelada" %}<br>Canceló {% if r.cancelada_por %}{{ r.cancelada_por.username }}{% else %}el cliente{% endif %}{% endif %}</small></td>
-        <td>{% if r.estado == "confirmada" or r.estado == "activa" %}<a href="{% url 'editar_reserva' r.pk %}">Editar</a>{% endif %}{% if r.estado == "confirmada" %}
+      <tr><td>{{ r.nombre }}{% if r.perros_texto %} · {{ r.perros_texto }}{% endif %}<br><small>{{ r.telefono }}</small></td><td>{{ r.habitacion }}</td><td>{{ r.entrada|date:"d/m/Y" }}</td><td>{{ r.salida|date:"d/m/Y" }}</td><td>${{ total|floatformat:0 }}</td><td><a href="{% url 'pagos_reserva' r.pk %}">{{ r.estado_pago }}</a></td><td>{{ r.get_estado_display }}{% if r.motivo_cancelacion %}<br><small>{{ r.motivo_cancelacion }}</small>{% endif %}</td><td><small>{% if r.creada_por %}Reservó {{ r.creada_por.username }}{% else %}Reservó el cliente{% endif %}{% if r.checkin_por %}<br>Check-in {{ r.checkin_por.username }}{% endif %}{% if r.checkout_por %}<br>Check-out {{ r.checkout_por.username }}{% endif %}{% if r.estado == "cancelada" %}<br>Canceló {% if r.cancelada_por %}{{ r.cancelada_por.username }}{% else %}el cliente{% endif %}{% endif %}</small></td>
+        <td>{% if r.estado == "confirmada" or r.estado == "activa" %}<a href="{% url 'editar_reserva' r.pk %}">Editar</a>{% endif %}{% if r.estado == "activa" %} <a href="{% url 'plan_reserva' r.pk %}">Plan de cuidado</a>{% endif %}{% if r.estado == "confirmada" %}
           <form class="en-linea" method="post" action="{% url 'cancelar' r.pk %}" onsubmit="return confirm('¿Cancelar esta reserva?')">{% csrf_token %}<input name="motivo" placeholder="Motivo (opcional)" maxlength="200"><button class="chico" type="submit">Cancelar</button></form>{% endif %}</td></tr>
     {% empty %}
-      <tr><td colspan="8">Todavía no hay reservaciones.</td></tr>
+      <tr><td colspan="9">Todavía no hay reservaciones.</td></tr>
     {% endfor %}
   </table>
   

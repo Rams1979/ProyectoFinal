@@ -14,8 +14,9 @@
         <strong>{{ f.hab }}</strong>
         <span>{{ f.etiqueta }}</span>
         {% if f.reserva %}
-          <span>{{ f.reserva.nombre }}{% if f.reserva.perro %} · perro {{ f.reserva.perro }}{% endif %}</span>
+          <span>{{ f.reserva.nombre }}{% if f.reserva.perros_texto %} · {{ f.reserva.perros_texto }}{% endif %}</span>
           <span>{{ f.reserva.entrada|date:"d/m" }} a {{ f.reserva.salida|date:"d/m" }}</span>
+          <span><a href="{% url 'pagos_reserva' f.reserva.pk %}">{{ f.reserva.estado_pago }}{% if f.reserva.saldo > 0 and f.reserva.pagado > 0 %} · saldo ${{ f.reserva.saldo|floatformat:0 }}{% endif %}</a></span>
         {% endif %}
         {% if f.clave == "llega" %}
           <a class="boton" href="{% url 'checkin' f.reserva.pk %}">Check-in</a>

@@ -1,9 +1,10 @@
 {% extends "hotel/base.html" %}
 {% block contenido %}
   <h2>{% if reserva.estado == "cancelada" %}Reserva cancelada{% else %}Reserva confirmada{% endif %}</h2>
-  <p>{{ reserva.nombre }} · {{ reserva.telefono }}<br>
+  <p>{{ reserva.nombre }} · {{ reserva.telefono }}{% if reserva.perros_texto %} · {{ reserva.perros_texto }}{% endif %}<br>
     {{ reserva.habitacion }} · {{ reserva.entrada }} a {{ reserva.salida }} · {{ noches }} noche{{ noches|pluralize }}<br>
-    Total ${{ total|floatformat:0 }}{% if reserva.estado != "cancelada" %} · pagada{% endif %}</p>
+    Total ${{ total|floatformat:0 }}{% if reserva.perro2 %} (incluye segundo perro){% endif %}</p>
+  {% if reserva.estado != "cancelada" %}<p>El pago (efectivo, SINPE o tarjeta) se coordina con el hotel.{% if anticipo %} Anticipo solicitado: ${{ anticipo|floatformat:0 }} ({{ anticipo_pct }} %).{% endif %}</p>{% endif %}
   {% if reserva.estado == "cancelada" %}
     <p>La reserva quedó cancelada y la habitación se liberó. El hotel define la devolución del pago y se comunicará con usted.</p>
   {% elif reserva.estado == "confirmada" %}

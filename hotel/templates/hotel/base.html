@@ -34,6 +34,8 @@
     .menu a:hover { background: #e8f0fe; }
     .menu strong { font-size: 1.1rem; }
     .menu small { color: #555; }
+    .hecha { text-decoration: line-through; color: #777; }
+    .aviso { background: #fff4e0; border: 1px solid #b26a00; border-radius: 6px; padding: .3rem .6rem; }
     .resumen { display: flex; flex-wrap: wrap; gap: .5rem 1.2rem; margin: .5rem 0 1rem; }
     .resumen strong { font-size: 1.3rem; }
     form.en-linea { display: inline; margin: 0; }
@@ -45,7 +47,7 @@
   <h1>Inu no Hoteru 犬のホテル</h1>
   <nav>
     {% if rol %}
-      <a href="{% url 'inicio' %}">Menú</a><a href="{% url 'disponibilidad' %}">Disponibilidad</a><a href="{% url 'panel' %}">Panel</a><a href="{% url 'reservaciones' %}">Reservaciones</a><a href="{% url 'clientes' %}">Clientes</a><a href="{% url 'chat' %}">Chat</a>{% if es_admin %}<a href="{% url 'solicitudes' %}">Solicitudes</a><a href="{% url 'usuarios' %}">Usuarios</a>{% endif %}
+      <a href="{% url 'inicio' %}">Menú</a><a href="{% url 'disponibilidad' %}">Disponibilidad</a><a href="{% url 'panel' %}">Panel</a><a href="{% url 'reservaciones' %}">Reservaciones</a><a href="{% url 'cuidado' %}">Cuidado</a><a href="{% url 'caja' %}">Caja</a><a href="{% url 'clientes' %}">Clientes</a><a href="{% url 'chat' %}">Chat</a>{% if es_admin %}<a href="{% url 'solicitudes' %}">Solicitudes</a><a href="{% url 'usuarios' %}">Usuarios</a>{% endif %}
       <form class="en-linea" method="post" action="{% url 'logout' %}">{% csrf_token %}<button class="chico" type="submit">Salir ({{ user.username }} · {{ rol }})</button></form>
     {% else %}
       <a href="{% url 'inicio' %}">Inicio</a><a href="{% url 'disponibilidad' %}">Disponibilidad</a><a href="{% url 'chat' %}">Chat</a><a href="{% url 'login' %}">Ingreso del personal</a>

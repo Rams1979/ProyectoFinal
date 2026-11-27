@@ -1,0 +1,25 @@
+{% extends "hotel/base.html" %}
+{% block contenido %}
+  <h2>Plan de cuidado · {{ reserva.habitacion }}</h2>
+  <p>{{ reserva.perros_texto|capfirst }} · {{ reserva.nombre }}</p>
+  {% if error %}<p class="error">{{ error }}</p>{% endif %}
+  {% if not bloqueado %}
+  <table>
+    <tr><th>Hora</th><th>Tarea</th><th></th></tr>
+    {% for i in items %}
+      <tr><td>{{ i.hora|time:"H:i"|default:"—" }}</td><td>{{ i.get_tipo_display }}{% if i.detalle %}: {{ i.detalle }}{% endif %}</td>
+        <td><form class="en-linea" method="post">{% csrf_token %}<input type="hidden" name="accion" value="quitar"><input type="hidden" name="item_id" value="{{ i.pk }}"><button class="chico" type="submit">Quitar</button></form></td></tr>
+    {% endfor %}
+  </table>
+  <h3>Agregar tarea diaria</h3>
+  <form class="filtros" method="post">
+    {% csrf_token %}
+    <label>Tipo <select name="tipo">{% for k, v in tipos %}<option value="{{ k }}">{{ v }}</option>{% endfor %}</select></label>
+    <label>Detalle (en medicación: nombre y dosis) <input name="detalle" maxlength="200"></label>
+    <label>Hora <input type="time" name="hora"></label>
+    <button type="submit">Agregar</button>
+  </form>
+  <p class="nota">Las tareas se repiten cada día mientras el perro esté en el hotel.</p>
+  {% endif %}
+  <p><a href="{% url 'cuidado' %}">Volver al cuidado diario</a></p>
+{% endblock %}

@@ -5,7 +5,7 @@
   {% if habitacion %}
     <p><strong>{{ habitacion }}</strong><br>
       Entrada {{ entrada_txt }} · Salida {{ salida_txt }} · {{ noches }} noche{{ noches|pluralize }}<br>
-      Total ${{ total|floatformat:0 }}</p>
+      Total ${{ total|floatformat:0 }}{% if perro2 %} (incluye segundo perro){% endif %}</p>
     {% if not bloqueado %}
     <form class="filtros" method="post">
       {% csrf_token %}
@@ -14,9 +14,11 @@
       <label>Nombre completo <input name="nombre" value="{{ nombre }}" required></label>
       <label>Teléfono <input name="telefono" value="{{ telefono }}" required></label>
       <label>Nombre del perro <input name="perro" value="{{ perro }}" maxlength="80"></label>
+      <label>Segundo perro, misma habitación (opcional) <input name="perro2" value="{{ perro2 }}" maxlength="80"></label>
       <button type="submit">Confirmar reserva</button>
     </form>
-    <p class="nota">Al confirmar, la reserva queda confirmada y se da por pagada (sin anticipo ni apartado).</p>
+    <p class="nota">Un segundo perro en la misma habitación suma {{ recargo }} % de la tarifa de la habitación: total ${{ total_con_segundo|floatformat:0 }} en lugar de ${{ total_base|floatformat:0 }}.</p>
+    <p class="nota">Al confirmar, la reserva queda confirmada. El pago (efectivo, SINPE o tarjeta) se coordina con el hotel.{% if anticipo %} El hotel pide un anticipo del {{ anticipo }} %.{% endif %}</p>
     {% endif %}
   {% endif %}
   <p><a href="{% url 'disponibilidad' %}">Volver a disponibilidad</a></p>

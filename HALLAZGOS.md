@@ -13,6 +13,10 @@ Resultado de las pruebas del recorrido completo. Lo que el prototipo hace a prop
 - Repositorio público con teléfono y correo del hotel: decidir si pasa a privado.
 - Requisitos sanitarios finales con el veterinario y datos "POR DEFINIR" de `hotel/conocimiento.md`.
 
+- Segundo perro: el documento dice que solo las habitaciones grandes admiten dos perros; en el prototipo todas son iguales y se admite en cualquiera. Falta definir si el recargo del 50 % aplica igual en habitaciones pequeñas.
+- Cuidado diario: el plan base (desayuno, paseo, limpieza, cena) es una propuesta mía, sin validar. Las tareas no cumplidas de días anteriores no se arrastran, no hay alertas de tarea vencida y el alimento propio del perro no tiene campo aparte (va en "cuidados").
+- Pagos: el anticipo solo se muestra, no bloquea el check-in ni la reserva. Un check-out anticipado reduce el total y puede dejar saldo a favor del cliente; la devolución se registra a mano. Los montos se muestran con coma decimal (formato de Costa Rica) y todo está en dólares: falta el tipo de cambio si se cobra en colones.
+
 ## Decisiones del prototipo (no son errores)
 - Sin registro de clientes ni de perros; la reserva pide nombre y teléfono y el nombre del perro se anota en el check-in.
 - Sin validación de vacunas ni fotos de recepción.

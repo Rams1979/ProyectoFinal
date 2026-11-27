@@ -1,0 +1,40 @@
+{% extends "hotel/base.html" %}
+{% block contenido %}
+  <h2>Pagos · {{ reserva.habitacion }}</h2>
+  <p>{{ reserva.nombre }} · {{ reserva.entrada|date:"d/m/Y" }} a {{ reserva.salida|date:"d/m/Y" }} · {{ reserva.get_estado_display }}</p>
+  <div class="resumen">
+    <span>Total <strong>${{ reserva.total|floatformat:2 }}</strong></span>
+    <span>Pagado <strong>${{ reserva.pagado|floatformat:2 }}</strong></span>
+    <span>Saldo <strong>${{ reserva.saldo|floatformat:2 }}</strong></span>
+    <span>{{ reserva.estado_pago }}</span>
+  </div>
+  {% if anticipo %}<p class="nota">Anticipo configurado: {{ anticipo_pct }} % = ${{ anticipo|floatformat:2 }}.</p>{% endif %}
+  {% if reserva.estado == "cancelada" and reserva.pagado > 0 %}<p class="aviso">Reserva cancelada con ${{ reserva.pagado|floatformat:2 }} pagados. La política de devolución está por definir: registre la devolución que el hotel decida.</p>{% endif %}
+  {% if error %}<p class="error">{{ error }}</p>{% endif %}
+  <table>
+    <tr><th>Fecha</th><th>Tipo</th><th>Monto</th><th>Método</th><th>Referencia</th><th>Registró</th></tr>
+    {% for p in pagos %}
+      <tr><td>{{ p.creado|date:"d/m/Y H:i" }}</td><td>{{ p.get_tipo_display }}</td><td>${{ p.monto }}</td><td>{{ p.get_metodo_display }}</td><td>{{ p.referencia }}</td><td>{{ p.registrado_por.username|default:"—" }}</td></tr>
+    {% empty %}<tr><td colspan="6">Sin pagos registrados.</td></tr>{% endfor %}
+  </table>
+  <h3>Registrar pago</h3>
+  <form class="filtros" method="post">
+    {% csrf_token %}
+    <label>Monto (USD) <input name="monto" inputmode="decimal" required></label>
+    <label>Método <select name="metodo">{% for k, v in metodos %}<option value="{{ k }}">{{ v }}</option>{% endfor %}</select></label>
+    <label>Referencia (n.º SINPE o aprobación) <input name="referencia" maxlength="60"></label>
+    <button type="submit">Registrar pago</button>
+  </form>
+  {% if reserva.pagado > 0 %}
+  <h3>Registrar devolución</h3>
+  <form class="filtros" method="post" onsubmit="return confirm('¿Registrar esta devolución?')">
+    {% csrf_token %}
+    <input type="hidden" name="accion" value="devolucion">
+    <label>Monto (USD) <input name="monto" inputmode="decimal" required></label>
+    <label>Método <select name="metodo">{% for k, v in metodos %}<option value="{{ k }}">{{ v }}</option>{% endfor %}</select></label>
+    <label>Motivo <input name="referencia" maxlength="60"></label>
+    <button type="submit">Registrar devolución</button>
+  </form>
+  {% endif %}
+  <p><a href="{% url 'reservaciones' %}">Volver a reservaciones</a></p>
+{% endblock %}

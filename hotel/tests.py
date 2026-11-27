@@ -62,7 +62,7 @@ class ReservaTests(TestCase):
         r = self.client.post(f"/reservar/{self.h1.pk}/", self.datos)
         self.assertEqual(r.status_code, 302)
         self.assertEqual(Reserva.objects.count(), 1)
-        self.assertContains(self.client.get(r.url), "pagada")  # el visitante ve su propia confirmación
+        self.assertContains(self.client.get(r.url), "se coordina con el hotel")  # el visitante ve su propia confirmación
         entrar(self.client)
         self.assertContains(self.client.get("/reservaciones/"), "Ana")
 
@@ -170,7 +170,7 @@ class RecorridoCompletoTests(TestCase):
         self.assertContains(r, "Total $90")
         r = self.client.post("/reservar/5/", {"entrada": entrada, "salida": salida, "nombre": "Luis", "telefono": "7000-0000"}, follow=True)
         self.assertContains(r, "Reserva confirmada")
-        self.assertContains(r, "pagada")
+        self.assertContains(r, "se coordina con el hotel")
 
         r = self.client.get("/disponibilidad/", {"entrada": entrada, "salida": salida})
         self.assertContains(r, "Habitaciones libres (29)")
@@ -493,3 +493,169 @@ class CancelarEditarTests(TestCase):
             r = self._reserva(self.h2, estado=estado)
             self.assertEqual(self.client.get(f"/reserva/{r.pk}/editar/").status_code, 409)
             r.delete()
+
+
+from decimal import Decimal
+
+from .models import ItemPlan, Pago, Tarea
+
+
+class SegundoPerroTests(TestCase):
+    def setUp(self):
+        self.d = timezone.localdate() + timedelta(days=4)
+        self.datos = {"entrada": self.d.isoformat(), "salida": (self.d + timedelta(days=2)).isoformat(),
+                      "nombre": "Ana", "telefono": "8888", "perro": "Rocky"}
+
+    def test_total_con_recargo_del_50_por_ciento(self):
+        r = self.client.get("/reservar/1/", {k: self.datos[k] for k in ("entrada", "salida")})
+        self.assertContains(r, "$90 en lugar de $60")
+        r = self.client.post("/reservar/1/", {**self.datos, "perro2": "Max"}, follow=True)
+        self.assertContains(r, "Total $90")
+        self.assertContains(r, "perros Rocky y Max")
+        res = Reserva.objects.get()
+        self.assertEqual(res.total, Decimal("90"))
+        self.assertEqual(res.perro2_ref.nombre, "Max")
+        self.assertEqual(res.cliente.perros.count(), 2)
+
+    def test_sin_segundo_perro_no_hay_recargo(self):
+        self.client.post("/reservar/1/", self.datos)
+        self.assertEqual(Reserva.objects.get().total, Decimal("60"))
+
+    def test_checkin_revisa_requisitos_de_ambos_perros(self):
+        self.client.post("/reservar/1/", {**self.datos, "perro2": "Max"})
+        res = Reserva.objects.get()
+        Reserva.objects.filter(pk=res.pk).update(entrada=timezone.localdate())
+        entrar(self.client)
+        r = self.client.get(f"/checkin/{res.pk}/")
+        self.assertContains(r, "Rocky: Rabia")
+        self.assertContains(r, "Max: Rabia")
+        self.assertEqual(self.client.post(f"/checkin/{res.pk}/", {"autoriza": "1"}).status_code, 302)
+
+    def test_editar_agrega_segundo_perro(self):
+        self.client.post("/reservar/1/", self.datos)
+        res = Reserva.objects.get()
+        entrar(self.client)
+        self.client.post(f"/reserva/{res.pk}/editar/", {**self.datos, "habitacion": 1, "perro2": "Luna"})
+        res.refresh_from_db()
+        self.assertEqual((res.perro2, res.total), ("Luna", Decimal("90")))
+
+
+class CuidadoTests(TestCase):
+    def setUp(self):
+        self.hoy = timezone.localdate()
+        self.u = entrar(self.client)
+        self.res = Reserva.objects.create(habitacion=Habitacion.objects.get(numero=1), nombre="Ana", telefono="1",
+                                          entrada=self.hoy, salida=self.hoy + timedelta(days=2), perro="Rocky")
+
+    def _checkin(self):
+        self.client.post(f"/checkin/{self.res.pk}/", {"autoriza": "1"})
+        self.res.refresh_from_db()
+
+    def test_checkin_crea_plan_base_y_tareas_del_dia(self):
+        self._checkin()
+        self.assertEqual(self.res.plan.count(), 4)
+        r = self.client.get("/cuidado/")
+        self.assertContains(r, "Desayuno")
+        self.assertContains(r, "4</strong> tareas pendientes")
+        self.assertEqual(Tarea.objects.filter(fecha=self.hoy).count(), 4)
+        self.client.get("/cuidado/")  # no duplica
+        self.assertEqual(Tarea.objects.count(), 4)
+
+    def test_marcar_hecha_y_deshacer(self):
+        self._checkin()
+        self.client.get("/cuidado/")
+        t = Tarea.objects.first()
+        self.client.post(f"/cuidado/tarea/{t.pk}/hecha/")
+        t.refresh_from_db()
+        self.assertEqual((t.hecha, t.hecha_por), (True, self.u))
+        self.assertContains(self.client.get("/cuidado/"), "3</strong> tareas pendientes")
+        self.client.post(f"/cuidado/tarea/{t.pk}/hecha/")
+        t.refresh_from_db()
+        self.assertFalse(t.hecha)
+
+    def test_plan_medicacion_y_notas_del_perro(self):
+        from .models import Cliente, Perro
+        c = Cliente.objects.create(nombre="Ana", telefono="1")
+        p = Perro.objects.create(cliente=c, nombre="Rocky", notas="Alérgico al pollo")
+        Reserva.objects.filter(pk=self.res.pk).update(cliente=c, perro_ref=p)
+        self._checkin()
+        self.assertEqual(self.client.post(f"/cuidado/reserva/{self.res.pk}/", {"tipo": "medicacion", "detalle": ""}).status_code, 400)
+        self.client.post(f"/cuidado/reserva/{self.res.pk}/", {"tipo": "medicacion", "detalle": "Apoquel 1 tableta", "hora": "08:00"})
+        r = self.client.get("/cuidado/")
+        self.assertContains(r, "Apoquel 1 tableta")
+        self.assertContains(r, "Alérgico al pollo")
+        item = ItemPlan.objects.get(tipo="medicacion")
+        self.client.post(f"/cuidado/reserva/{self.res.pk}/", {"accion": "quitar", "item_id": item.pk})
+        self.assertFalse(ItemPlan.objects.filter(tipo="medicacion").exists())
+
+    def test_no_se_edita_plan_si_no_esta_en_hotel(self):
+        self.assertEqual(self.client.get(f"/cuidado/reserva/{self.res.pk}/").status_code, 409)
+
+    def test_visitante_no_ve_cuidado(self):
+        self.client.logout()
+        self.assertEqual(self.client.get("/cuidado/").status_code, 302)
+
+
+class PagosTests(TestCase):
+    def setUp(self):
+        self.hoy = timezone.localdate()
+        self.u = entrar(self.client)
+        self.res = Reserva.objects.create(habitacion=Habitacion.objects.get(numero=1), nombre="Ana", telefono="1",
+                                          entrada=self.hoy + timedelta(days=3), salida=self.hoy + timedelta(days=5))  # total $60
+
+    def _pagar(self, monto, metodo="sinpe", **extra):
+        return self.client.post(f"/reserva/{self.res.pk}/pagos/", {"monto": monto, "metodo": metodo, **extra})
+
+    def test_pago_parcial_y_total(self):
+        self.assertEqual(self.res.estado_pago, "Pendiente")
+        self.assertEqual(self._pagar("20", referencia="123").status_code, 302)
+        self.assertEqual((self.res.estado_pago, self.res.saldo), ("Parcial", Decimal("40")))
+        self._pagar("40", "efectivo")
+        self.assertEqual((self.res.estado_pago, self.res.saldo), ("Pagada", Decimal("0")))
+        self.assertContains(self.client.get("/reservaciones/"), "Pagada")
+
+    def test_validaciones_de_pago(self):
+        self.assertEqual(self._pagar("0").status_code, 400)
+        self.assertEqual(self._pagar("abc").status_code, 400)
+        self.assertEqual(self._pagar("10", "bitcoin").status_code, 400)
+        self.assertContains(self._pagar("61"), "supera el saldo", status_code=400)
+        self.assertEqual(self.res.pagos.count(), 0)
+
+    def test_cancelada_con_pagos_exige_definir_devolucion(self):
+        self._pagar("30")
+        self.client.post(f"/reserva/{self.res.pk}/cancelar/")
+        self.res.refresh_from_db()
+        self.assertEqual(self.res.estado_pago, "Devolución por definir")
+        self.assertContains(self.client.get(f"/reserva/{self.res.pk}/pagos/"), "política de devolución está por definir")
+        self.assertEqual(self._pagar("10").status_code, 400)  # no se cobra sobre una cancelada
+        self.assertEqual(self.client.post(f"/reserva/{self.res.pk}/pagos/", {"accion": "devolucion", "monto": "31", "metodo": "sinpe"}).status_code, 400)
+        self.client.post(f"/reserva/{self.res.pk}/pagos/", {"accion": "devolucion", "monto": "30", "metodo": "sinpe", "referencia": "cancelación"})
+        self.assertEqual((self.res.pagado, self.res.estado_pago), (Decimal("0"), "Sin pagos"))
+
+    def test_caja_del_dia_por_metodo(self):
+        self._pagar("20", "sinpe")
+        self._pagar("10", "efectivo")
+        self.client.post(f"/reserva/{self.res.pk}/pagos/", {"accion": "devolucion", "monto": "5", "metodo": "efectivo"})
+        r = self.client.get("/caja/")
+        self.assertContains(r, "<strong>$25,00</strong>")
+        self.assertContains(self.client.get("/caja/", {"dia": "2020-01-01"}), "Sin movimientos ese día")
+
+    def test_checkout_anticipado_deja_saldo_a_favor(self):
+        Reserva.objects.filter(pk=self.res.pk).update(entrada=self.hoy - timedelta(days=1), salida=self.hoy + timedelta(days=2), estado="activa")
+        self._pagar("90")
+        self.client.post(f"/checkout/{self.res.pk}/")
+        self.res.refresh_from_db()
+        self.assertEqual((self.res.total, self.res.estado_pago), (Decimal("30"), "Saldo a favor del cliente"))
+
+    def test_anticipo_configurable_y_visitante_sin_acceso(self):
+        with self.settings(ANTICIPO_PORCENTAJE=30):
+            self.assertEqual(self.res.anticipo_requerido, Decimal("18.00"))
+            self.assertContains(self.client.get(f"/reserva/{self.res.pk}/pagos/"), "18,00")
+        self.client.logout()
+        self.assertEqual(self.client.get(f"/reserva/{self.res.pk}/pagos/").status_code, 302)
+        self.assertEqual(self.client.get("/caja/").status_code, 302)
+
+    def test_limpiar_demo_borra_pagos(self):
+        self._pagar("10")
+        call_command("limpiar_demo")
+        self.assertEqual((Pago.objects.count(), Reserva.objects.count()), (0, 0))

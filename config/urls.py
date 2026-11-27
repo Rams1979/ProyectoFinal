@@ -24,5 +24,10 @@ urlpatterns = [
     path("clientes/<int:cliente_id>/", views.cliente, name="cliente"),
     path("reserva/<int:reserva_id>/cancelar/", views.cancelar, name="cancelar"),
     path("reserva/<int:reserva_id>/editar/", views.editar_reserva, name="editar_reserva"),
+    path("cuidado/", views.cuidado, name="cuidado"),
+    path("cuidado/tarea/<int:tarea_id>/hecha/", views.tarea_hecha, name="tarea_hecha"),
+    path("cuidado/reserva/<int:reserva_id>/", views.plan_reserva, name="plan_reserva"),
+    path("reserva/<int:reserva_id>/pagos/", views.pagos_reserva, name="pagos_reserva"),
+    path("caja/", views.caja, name="caja"),
     path("reservaciones/", views.reservaciones, name="reservaciones"),
 ]

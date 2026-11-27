@@ -77,3 +77,8 @@ if _dominio:  # detrás del proxy HTTPS de Railway
     SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
+
+# Porcentaje de anticipo que el hotel pide al reservar (0 = sin anticipo). Política por definir.
+ANTICIPO_PORCENTAJE = int(os.environ.get("ANTICIPO_PORCENTAJE", "0"))
+# Recargo por segundo perro en la misma habitación, sobre la tarifa de la habitación.
+RECARGO_SEGUNDO_PERRO = 50

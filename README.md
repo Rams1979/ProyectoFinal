@@ -21,6 +21,20 @@ Prototipo con datos de ejemplo (no es un sistema para operar el hotel). Django +
 - Editar (solo personal): reserva confirmada permite fechas, habitación, nombre, teléfono y perro; con el perro en el hotel solo se mueve la salida. Revisa disponibilidad sin contarse a sí misma y bloquea la habitación.
 - Reservas cerradas o canceladas no se editan. No hay reactivación: se crea una reserva nueva.
 
+## Etapa 9: segundo perro
+- Una reserva admite un segundo perro en la misma habitación; suma 50 % de la tarifa de la habitación (`RECARGO_SEGUNDO_PERRO` en `settings.py`). Se pide al reservar o lo agrega el personal al editar.
+- El check-in revisa los requisitos sanitarios de los dos perros.
+
+## Etapa 10: cuidado diario
+- Al hacer el check-in se crea un plan diario base (desayuno, paseo, limpieza, cena). El personal agrega o quita tareas, incluida la medicación con dosis, desde `/cuidado/reserva/<id>/`.
+- `/cuidado/` muestra las tareas de hoy por habitación, ordenadas por hora, con los cuidados del perro destacados; cada tarea se marca como hecha o se deshace y guarda quién y cuándo.
+
+## Etapa 11: pagos y anticipo
+- Ya no se da por pagada la reserva. El personal registra pagos (efectivo, SINPE o tarjeta, con referencia) y devoluciones en `/reserva/<id>/pagos/`; hay estado Pendiente, Parcial, Pagada o Saldo a favor.
+- `/caja/` resume por día y método lo cobrado, devuelto y neto.
+- Anticipo opcional: variable `ANTICIPO_PORCENTAJE` (0 por defecto = sin anticipo); solo se muestra, no bloquea.
+- No hay cobro en línea: el sistema solo registra lo que el personal recibe.
+
 ## Menú principal
 - `/` es el menú con acceso a todas las pantallas y un dato vivo en cada una. La lista de habitaciones pasó a `/habitaciones/`.
 
