@@ -29,6 +29,11 @@
     .panel li.llega { border-color: #b26a00; background: #fff4e0; }
     .panel li.limpieza { border-color: #777; background: #f0f0f0; border-style: dashed; }
     .panel li.libre { border-color: #2e7d32; }
+    .menu { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: .8rem; list-style: none; padding: 0; }
+    .menu a { display: flex; flex-direction: column; gap: .3rem; border: 2px solid #1a73e8; border-radius: 8px; padding: .8rem; text-decoration: none; color: inherit; height: 100%; box-sizing: border-box; }
+    .menu a:hover { background: #e8f0fe; }
+    .menu strong { font-size: 1.1rem; }
+    .menu small { color: #555; }
     .resumen { display: flex; flex-wrap: wrap; gap: .5rem 1.2rem; margin: .5rem 0 1rem; }
     .resumen strong { font-size: 1.3rem; }
     form.en-linea { display: inline; margin: 0; }
@@ -38,7 +43,7 @@
 </head>
 <body>
   <h1>Inu no Hoteru 犬のホテル</h1>
-  <nav><a href="{% url 'inicio' %}">Habitaciones</a><a href="{% url 'disponibilidad' %}">Disponibilidad</a><a href="{% url 'panel' %}">Panel</a><a href="{% url 'reservaciones' %}">Reservaciones</a><a href="{% url 'clientes' %}">Clientes</a><a href="{% url 'chat' %}">Chat</a><a href="{% url 'solicitudes' %}">Solicitudes</a></nav>
+  <nav><a href="{% url 'inicio' %}">Menú</a><a href="{% url 'disponibilidad' %}">Disponibilidad</a><a href="{% url 'panel' %}">Panel</a><a href="{% url 'reservaciones' %}">Reservaciones</a><a href="{% url 'clientes' %}">Clientes</a><a href="{% url 'chat' %}">Chat</a><a href="{% url 'solicitudes' %}">Solicitudes</a></nav>
   <p class="nota">Prototipo conceptual con datos de ejemplo.</p>
   {% block contenido %}{% endblock %}
 </body>

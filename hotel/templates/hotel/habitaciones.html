@@ -1,0 +1,11 @@
+{% extends "hotel/base.html" %}
+{% block contenido %}
+  <h2>Habitaciones ({{ habitaciones|length }})</h2>
+  <ul class="lista">
+    {% for h in habitaciones %}
+      <li><span>{{ h }}</span><span>${{ h.tarifa_noche|floatformat:0 }} por noche</span></li>
+    {% empty %}
+      <li>No hay habitaciones cargadas.</li>
+    {% endfor %}
+  </ul>
+{% endblock %}

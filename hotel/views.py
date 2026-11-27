@@ -14,8 +14,24 @@ from .models import Cliente, Habitacion, Perro, Reserva, SolicitudContacto, Vacu
 
 
 def inicio(request):
-    habitaciones = Habitacion.objects.all()
-    return render(request, "hotel/inicio.html", {"habitaciones": habitaciones})
+    """Menú principal: acceso a todas las pantallas, con un dato vivo en cada una."""
+    hoy = timezone.localdate()
+    ocupadas = Reserva.objects.filter(estado=Reserva.ACTIVA).count()
+    llegan = Reserva.objects.filter(estado=Reserva.CONFIRMADA, entrada=hoy).count()
+    menu = [
+        ("panel", "Panel de ocupación", f"{ocupadas} ocupadas · {llegan} llegan hoy", "Estado de las habitaciones hoy, check-in y check-out."),
+        ("disponibilidad", "Disponibilidad", "Buscar por fechas", "Habitaciones libres y reserva."),
+        ("reservaciones", "Reservaciones", f"{Reserva.objects.exclude(estado=Reserva.CERRADA).count()} vigentes", "Lista de reservas con su estado."),
+        ("clientes", "Clientes y perros", f"{Cliente.objects.count()} clientes", "Fichas, perros y requisitos sanitarios."),
+        ("chat", "Chat", "Asistente del hotel", "Preguntas frecuentes y disponibilidad."),
+        ("solicitudes", "Solicitudes de contacto", f"{SolicitudContacto.objects.count()} recibidas", "Datos que dejaron clientes en el chat."),
+        ("habitaciones", "Habitaciones", f"{Habitacion.objects.count()} habitaciones", "Lista y tarifa por noche."),
+    ]
+    return render(request, "hotel/inicio.html", {"menu": menu, "hoy": hoy})
+
+
+def habitaciones(request):
+    return render(request, "hotel/habitaciones.html", {"habitaciones": Habitacion.objects.all()})
 
 
 def _fecha(texto):

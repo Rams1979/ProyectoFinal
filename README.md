@@ -7,6 +7,9 @@ Prototipo con datos de ejemplo (no es un sistema para operar el hotel). Django +
 - Check-in desde el panel (pide el nombre del perro); check-out cierra la estancia y deja la habitación en limpieza hasta marcarla disponible.
 - El check-out anticipado libera las fechas restantes. No se hace check-in antes de la fecha de entrada ni si la habitación está en limpieza.
 
+## Menú principal
+- `/` es el menú con acceso a todas las pantallas y un dato vivo en cada una. La lista de habitaciones pasó a `/habitaciones/`.
+
 ## Etapa 6: registro de clientes y perros
 - `/clientes/`: búsqueda por nombre, teléfono o perro; alta manual y ficha con sus perros.
 - Reservar crea o reutiliza al cliente (por teléfono) y al perro (por nombre) si se escribe; si no, el check-in lo pide y lo registra.

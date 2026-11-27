@@ -288,3 +288,12 @@ class ClientesTests(TestCase):
         self.assertEqual(self.client.post(f"/checkin/{res.pk}/", {"perro": "Max"}).status_code, 302)
         self.assertEqual(Perro.objects.get().nombre, "Max")
         self.assertContains(self.client.get("/clientes/?q=max"), "Ana")
+
+
+class MenuTests(TestCase):
+    def test_menu_enlaza_todas_las_pantallas(self):
+        r = self.client.get("/")
+        for url in ("/panel/", "/disponibilidad/", "/reservaciones/", "/clientes/", "/chat/", "/solicitudes/", "/habitaciones/"):
+            self.assertContains(r, f'href="{url}"')
+            self.assertEqual(self.client.get(url).status_code, 200)
+        self.assertContains(self.client.get("/habitaciones/"), "Habitaciones (30)")
