@@ -21,7 +21,7 @@
   {% if error %}<p class="error">{{ error }}</p>{% endif %}
 
   {% for item in perros %}
-    <h3>{{ item.perro.nombre }}{% if item.perro.raza %} · {{ item.perro.raza }}{% endif %}</h3>
+    <h3><a href="{% url 'perro' item.perro.pk %}">{{ item.perro.nombre }}</a>{% if item.perro.raza %} · {{ item.perro.raza }}{% endif %}{% if item.perro.tamano_texto %} · {{ item.perro.tamano_texto }}{% endif %} <small><a href="{% url 'perro_editar' item.perro.pk %}">Editar ficha</a></small></h3>
     {% if item.perro.nacimiento %}<p>Nacimiento: {{ item.perro.nacimiento|date:"d/m/Y" }}</p>{% endif %}
     {% if item.perro.notas %}<p>Cuidados: {{ item.perro.notas }}</p>{% endif %}
     <table>

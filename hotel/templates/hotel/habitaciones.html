@@ -3,9 +3,9 @@
   <h2>Habitaciones y tarifas</h2>
   {% if error %}<p class="error">{{ error }}</p>{% endif %}
   <table>
-    <tr><th>Habitación</th><th>Tamaño</th><th>Tarifa por noche</th><th>Estado</th><th></th></tr>
+    <tr><th>Habitación</th><th>Tamaño</th><th>Perros</th><th>Tarifa por noche</th><th>Estado</th><th></th></tr>
     {% for f in filas %}
-      <tr><td>{{ f.h }}</td><td>{{ f.h.get_tamano_display }}</td><td>${{ f.h.tarifa_noche }}</td>
+      <tr><td>{{ f.h }}</td><td>{{ f.h.get_tamano_display }}</td><td>{{ f.h.capacidad_perros }}</td><td>${{ f.h.tarifa_noche }}</td>
         <td>{% if not f.h.activa %}Inactiva{% elif f.mantenimiento %}En mantenimiento hasta el {{ f.mantenimiento.hasta|date:"d/m/Y" }}{% elif f.proximo %}Mantenimiento desde el {{ f.proximo.desde|date:"d/m/Y" }}{% else %}Activa{% endif %}{% if f.h.nota %}<br><small>{{ f.h.nota }}</small>{% endif %}</td>
         <td><a href="{% url 'habitacion_editar' f.h.pk %}">Editar</a></td></tr>
     {% endfor %}
@@ -22,6 +22,7 @@
     {% csrf_token %}<input type="hidden" name="accion" value="nueva">
     <label>Número <input name="numero" inputmode="numeric" required></label>
     <label>Tamaño <select name="tamano">{% for v, e in tamanos %}<option value="{{ v }}"{% if v == "mediana" %} selected{% endif %}>{{ e }}</option>{% endfor %}</select></label>
+    <label>Perros que admite <select name="capacidad_perros"><option value="">Según el tamaño</option><option value="1">1</option><option value="2">2</option></select></label>
     <label>Tarifa por noche (USD) <input name="tarifa" inputmode="decimal" required></label>
     <button type="submit">Agregar</button>
   </form>

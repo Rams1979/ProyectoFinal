@@ -2,7 +2,7 @@
 {% block contenido %}
   <h2>{% if reserva.estado == "cancelada" %}Reserva cancelada{% else %}Reserva confirmada{% endif %}</h2>
   <p>{{ reserva.nombre }} · {{ reserva.telefono }}{% if reserva.perros_texto %} · {{ reserva.perros_texto }}{% endif %}<br>
-    {{ reserva.habitacion }} ({{ reserva.habitacion.get_tamano_display|lower }}) · {{ reserva.entrada }} a {{ reserva.salida }} · {{ noches }} noche{{ noches|pluralize }}<br>
+    {{ reserva.habitacion }} ({{ reserva.habitacion.get_tamano_display|lower }}) · {{ reserva.entrada }} a {{ reserva.salida }}{% if reserva.hora_ingreso_estimada %} · ingreso estimado {{ reserva.hora_ingreso_estimada|time:"H:i" }}{% endif %} · {{ noches }} noche{{ noches|pluralize }}<br>
     Total ${{ total|floatformat:0 }}{% if reserva.perro2 %} (incluye segundo perro){% endif %}</p>
   {% if reserva.estado != "cancelada" %}<p>El pago (efectivo, SINPE o tarjeta) se coordina con el hotel.{% if anticipo %} Anticipo solicitado: ${{ anticipo|floatformat:0 }} ({{ anticipo_pct }} %).{% endif %}</p>{% endif %}
   {% if reserva.estado == "cancelada" %}

@@ -6,7 +6,8 @@
     {% csrf_token %}
     <label>Código <input name="codigo" maxlength="20" value="{{ datos.codigo|default:a.codigo }}" required></label>
     <label>Nombre <input name="nombre" maxlength="120" value="{{ datos.nombre|default:a.nombre }}" required></label>
-    <label>Tipo <select name="tipo">{% for k, v in tipos %}<option value="{{ k }}" {% if k == a.tipo %}selected{% endif %}>{{ v }}</option>{% endfor %}</select></label>
+    <label>Categoría <select name="tipo">{% for k, v in tipos %}<option value="{{ k }}" {% if k == a.tipo %}selected{% endif %}>{{ v }}</option>{% endfor %}</select></label>
+    <label>Tamaño de perro (si el precio depende de él) <select name="tamano_perro"><option value="">No aplica</option>{% for k, v in tamanos_perro %}<option value="{{ k }}"{% if k == a.tamano_perro %} selected{% endif %}>{{ v }}</option>{% endfor %}</select></label>
     <label>Precio (USD, vacío si está por definir) <input name="precio" inputmode="decimal" value="{% if datos %}{{ datos.precio }}{% elif a.precio is not None %}{{ a.precio }}{% endif %}"></label>
     <label>Unidad <input name="unidad" maxlength="30" value="{{ datos.unidad|default:a.unidad }}"></label>
     <label>Descripción <input name="descripcion" maxlength="200" value="{{ datos.descripcion|default:a.descripcion }}"></label>

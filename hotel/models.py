@@ -11,6 +11,7 @@ class Habitacion(models.Model):
     tarifa_noche = models.DecimalField(max_digits=8, decimal_places=2, default=30)
     en_limpieza = models.BooleanField(default=False)
     tamano = models.CharField(max_length=10, choices=TAMANOS, default="mediana")
+    capacidad_perros = models.PositiveSmallIntegerField(default=1)  # 1 por defecto; las grandes admiten 2
     activa = models.BooleanField(default=True)  # una habitación inactiva no se ofrece ni aparece en el panel
     nota = models.CharField(max_length=200, blank=True)
 
@@ -96,11 +97,65 @@ class Cliente(models.Model):
 
 
 class Perro(models.Model):
+    """Ficha del perro según el CU-03 del documento del caso de uso (la foto y el carnet adjunto quedan pendientes)."""
+
+    SEXOS = [("macho", "Macho"), ("hembra", "Hembra")]
+    ALIMENTACION = [("seco", "Seco"), ("humedo", "Húmedo"), ("casero", "Casero"), ("especial", "Dieta especial")]
+    TEMPERAMENTOS = [("amigable", "Amigable"), ("timido", "Tímido"), ("energetico", "Energético"), ("ansioso", "Ansioso")]
+    CONVIVENCIA = [("si", "Convive bien"), ("no", "No convive con otros perros"), ("depende", "Depende del perro")]
+    LIMITES_TAMANO = [(10, "pequeno"), (25, "mediano"), (45, "grande")]  # hasta ese peso inclusive; más es gigante
+
     cliente = models.ForeignKey(Cliente, on_delete=models.PROTECT, related_name="perros")
+    # identificación
     nombre = models.CharField(max_length=80)
-    raza = models.CharField(max_length=80, blank=True)
+    sexo = models.CharField(max_length=6, choices=SEXOS, blank=True)
+    raza = models.CharField("Raza o cruce", max_length=80, blank=True)
     nacimiento = models.DateField(null=True, blank=True)
-    notas = models.CharField(max_length=300, blank=True)  # alimentación, medicación, cuidados
+    peso_kg = models.DecimalField("Peso (kg)", max_digits=5, decimal_places=1, null=True, blank=True)
+    color_senas = models.CharField("Color y señas particulares", max_length=200, blank=True)
+    microchip = models.CharField(max_length=30, blank=True)
+    esterilizado = models.BooleanField(default=False)
+    # salud
+    ultimo_celo = models.DateField(null=True, blank=True)  # solo hembras no esterilizadas
+    operaciones = models.TextField("Operaciones y cirugías (fecha y detalle)", blank=True)
+    condiciones = models.TextField("Lesiones o condiciones crónicas", blank=True)
+    alergias = models.TextField("Alergias (alimentarias y a medicamentos)", blank=True)
+    vet_nombre = models.CharField("Veterinario de cabecera", max_length=120, blank=True)
+    vet_clinica = models.CharField(max_length=120, blank=True)
+    vet_telefono = models.CharField(max_length=30, blank=True)
+    # alimentación habitual
+    alimentacion_tipo = models.CharField(max_length=10, choices=ALIMENTACION, blank=True)
+    alimento_marca = models.CharField(max_length=100, blank=True)
+    alimento_cantidad = models.CharField("Cantidad por toma", max_length=40, blank=True)
+    alimento_tomas = models.PositiveSmallIntegerField("Número de tomas por día", null=True, blank=True)
+    alimento_horarios = models.CharField(max_length=100, blank=True)
+    restricciones_premios = models.CharField("Restricciones y premios permitidos", max_length=250, blank=True)
+    come_separado = models.BooleanField("Debe comer separado de otros perros", default=False)
+    # comportamiento
+    temperamento = models.CharField(max_length=12, choices=TEMPERAMENTOS, blank=True)
+    mordidas = models.CharField("Historial de mordidas o agresión (con perros o personas)", max_length=250, blank=True)
+    convivencia = models.CharField("Convivencia con otros perros", max_length=8, choices=CONVIVENCIA, blank=True)
+    ansiedad_miedos = models.CharField("Ansiedad por separación y miedos (truenos, pólvora)", max_length=250, blank=True)
+    socializacion_fecha = models.DateField("Prueba de socialización: fecha", null=True, blank=True)
+    socializacion_obs = models.CharField("Prueba de socialización: observaciones", max_length=250, blank=True)
+    hospedajes_anteriores = models.CharField("Hospedajes anteriores (dónde y cómo le fue)", max_length=250, blank=True)
+    # cuidado
+    bano_cada_dias = models.PositiveSmallIntegerField("Frecuencia de baño (cada cuántos días)", null=True, blank=True)
+    notas = models.CharField(max_length=300, blank=True)  # cuidados varios
+
+    @property
+    def tamano(self):
+        """Clasificación por peso: pequeno (hasta 10 kg), mediano (hasta 25), grande (hasta 45) o gigante. None si no hay peso."""
+        if self.peso_kg is None:
+            return None
+        for limite, nombre in self.LIMITES_TAMANO:
+            if self.peso_kg <= limite:
+                return nombre
+        return "gigante"
+
+    @property
+    def tamano_texto(self):
+        return dict(Habitacion.TAMANOS_PERRO).get(self.tamano, "") if self.tamano else ""
 
     class Meta:
         ordering = ["nombre"]
@@ -168,6 +223,9 @@ class Reserva(models.Model):
     cancelada_por = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="+")  # vacío si canceló el cliente
     motivo_cancelacion = models.CharField(max_length=200, blank=True)
     checkin_en = models.DateTimeField(null=True, blank=True)
+    hora_ingreso_estimada = models.TimeField(null=True, blank=True)
+    pertenencias = models.CharField("Pertenencias entregadas (cama, juguetes, correa)", max_length=250, blank=True)
+    estado_fisico_ingreso = models.CharField("Estado físico al ingreso", max_length=250, blank=True)
     checkout_en = models.DateTimeField(null=True, blank=True)
 
     class Meta:
@@ -331,10 +389,14 @@ class PerfilUsuario(models.Model):
 class Articulo(models.Model):
     """Maestro de artículos: lista de precios de servicios y productos (sin inventario)."""
 
-    TIPOS = [("servicio", "Servicio"), ("producto", "Producto")]
+    TIPOS = [("alimento", "Alimento"), ("medicina", "Medicina"), ("habitacion", "Habitación"), ("servicio", "Servicio")]  # categoría
+    CON_INVENTARIO = {"alimento", "medicina"}
     codigo = models.CharField(max_length=20, unique=True)
     nombre = models.CharField(max_length=120)
-    tipo = models.CharField(max_length=10, choices=TIPOS, default="servicio")
+    tipo = models.CharField("Categoría", max_length=12, choices=TIPOS, default="servicio")
+    control_inventario = models.BooleanField(default=False)  # sí para alimento y medicina; no para habitación
+    tamano_perro = models.CharField("Tamaño de perro (para precios por tamaño, ej. baño)", max_length=8, blank=True,
+                                    choices=Habitacion.TAMANOS_PERRO)
     descripcion = models.CharField(max_length=200, blank=True)
     unidad = models.CharField(max_length=30, blank=True)  # por noche, por hora, por baño...
     precio = models.DecimalField(max_digits=8, decimal_places=2, null=True, blank=True)  # vacío = por definir
@@ -342,3 +404,76 @@ class Articulo(models.Model):
 
     class Meta:
         ordering = ["codigo"]
+
+
+class Medicacion(models.Model):
+    """Medicación de un perro (CU-07)."""
+
+    VIAS = [("pastilla", "Pastilla"), ("gotas", "Gotas"), ("inyeccion", "Inyección"), ("topico", "Tópico")]
+    COMIDA = [("con", "Con comida"), ("sin", "Sin comida"), ("indiferente", "Indiferente")]
+    ORIGENES = [("cliente", "Cliente"), ("hotel", "Hotel")]
+
+    perro = models.ForeignKey(Perro, on_delete=models.CASCADE, related_name="medicaciones")
+    medicamento = models.CharField(max_length=120)
+    dosis = models.CharField(max_length=80, blank=True)
+    via = models.CharField(max_length=10, choices=VIAS, blank=True)
+    horario = models.CharField("Horario (cada cuántas horas)", max_length=80, blank=True)
+    desde = models.DateField(null=True, blank=True)
+    hasta = models.DateField(null=True, blank=True)
+    con_comida = models.CharField(max_length=12, choices=COMIDA, default="indiferente")
+    origen = models.CharField(max_length=8, choices=ORIGENES, default="cliente")  # si es del hotel, se cobra como producto
+    cantidad_recibida = models.CharField(max_length=60, blank=True)  # para verificar que alcance para la estancia
+    indicacion = models.CharField("Indicación médica (receta o instrucción)", max_length=250, blank=True)
+    activa = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ["-activa", "medicamento"]
+        verbose_name_plural = "medicaciones"
+
+    def __str__(self):
+        return f"{self.medicamento} ({self.perro})"
+
+
+class NecesidadEspecial(models.Model):
+    """Necesidad especial de un perro (CU-07): médica, dieta, movilidad, comportamiento, manejo o ambiente."""
+
+    TIPOS = [("medica", "Médica"), ("dieta", "Dieta"), ("movilidad", "Movilidad"), ("comportamiento", "Comportamiento"),
+             ("manejo", "Manejo"), ("ambiente", "Ambiente")]
+
+    perro = models.ForeignKey(Perro, on_delete=models.CASCADE, related_name="necesidades")
+    tipo = models.CharField(max_length=14, choices=TIPOS)
+    detalle = models.CharField(max_length=250)
+    activa = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ["-activa", "tipo"]
+        verbose_name_plural = "necesidades especiales"
+
+    def __str__(self):
+        return f"{self.get_tipo_display()}: {self.detalle}"
+
+
+class PlanAlimentacion(models.Model):
+    """Plan de alimentación de un perro (CU-05). Un cambio crea un plan nuevo y conserva el histórico."""
+
+    ORIGENES = [("cliente", "Cliente"), ("hotel", "Hotel")]
+
+    perro = models.ForeignKey(Perro, on_delete=models.CASCADE, related_name="planes")
+    alimento = models.CharField(max_length=120)
+    origen = models.CharField(max_length=8, choices=ORIGENES, default="cliente")  # define si se cobra
+    cantidad_toma = models.CharField("Cantidad por toma (gramos o tazas)", max_length=40, blank=True)
+    tomas_dia = models.PositiveSmallIntegerField("Tomas por día", default=2)
+    horarios = models.CharField(max_length=100, blank=True)  # ejemplo: 7:00 y 17:00
+    desde = models.DateField()
+    hasta = models.DateField(null=True, blank=True)
+    complementos = models.CharField("Complementos y premios", max_length=200, blank=True)
+    restricciones = models.CharField("Restricciones y alergias", max_length=200, blank=True)
+    instrucciones = models.CharField(max_length=250, blank=True)  # ejemplo: humedecer el alimento, comer separado
+    cantidad_recibida = models.CharField("Cantidad de alimento recibida (si es del cliente)", max_length=60, blank=True)
+
+    class Meta:
+        ordering = ["-desde", "-id"]
+        verbose_name_plural = "planes de alimentación"
+
+    def __str__(self):
+        return f"{self.alimento} ({self.perro})"

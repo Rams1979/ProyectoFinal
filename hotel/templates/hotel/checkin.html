@@ -17,6 +17,9 @@
     {% else %}
       <label>Nombre del perro <input name="perro" maxlength="80" required></label>
     {% endif %}
+    {% if reserva.hora_ingreso_estimada %}<p>Hora estimada de ingreso: {{ reserva.hora_ingreso_estimada|time:"H:i" }}</p>{% endif %}
+    <label>Pertenencias entregadas (cama, juguetes, correa) <input name="pertenencias" maxlength="250"></label>
+    <label>Estado físico al ingreso <input name="estado_fisico" maxlength="250"></label>
     <button type="submit">Confirmar check-in</button>
   </form>
   {% endif %}

@@ -511,6 +511,7 @@ from .models import Articulo, BloqueoHabitacion, ItemPlan, Pago, Tarea
 
 class SegundoPerroTests(TestCase):
     def setUp(self):
+        Habitacion.objects.filter(numero=1).update(capacidad_perros=2)  # las pequeñas admiten 1; aquí se prueba el recargo
         self.d = timezone.localdate() + timedelta(days=4)
         self.datos = {"entrada": self.d.isoformat(), "salida": (self.d + timedelta(days=2)).isoformat(),
                       "nombre": "Ana", "telefono": "8888", "perro": "Rocky"}
@@ -1356,3 +1357,137 @@ class TamanoPerroTests(TestCase):
         r = chat.consultar_disponibilidad(self.e.isoformat(), self.s.isoformat(), "gigante")
         self.assertEqual(r["habitaciones_libres"], 10)
         self.assertIn("error", chat.consultar_disponibilidad(self.e.isoformat(), self.s.isoformat(), "enorme"))
+
+
+class FichasCompletasTests(TestCase):
+    def setUp(self):
+        self.admin = entrar(self.client, "Administrador")
+        self.cli = Cliente.objects.create(nombre="Marta", telefono="500")
+        from .models import Perro
+        self.perro = Perro.objects.create(cliente=self.cli, nombre="Rex")
+        self.d = timezone.localdate() + timedelta(days=4)
+        self.q = {"entrada": self.d.isoformat(), "salida": (self.d + timedelta(days=2)).isoformat()}
+
+    def test_clasificacion_por_peso(self):
+        from .models import Perro
+        casos = [(None, None), ("8", "pequeno"), ("10", "pequeno"), ("10.1", "mediano"), ("25", "mediano"), ("25.5", "grande"),
+                 ("45", "grande"), ("45.1", "gigante"), ("60", "gigante")]
+        for peso, esperado in casos:
+            p = Perro(nombre="x", peso_kg=Decimal(peso) if peso else None)
+            self.assertEqual(p.tamano, esperado, peso)
+        self.assertEqual(Perro(nombre="x", peso_kg=Decimal("12")).tamano_texto, "Mediano (10 a 25 kg)")
+
+    def test_ficha_completa_del_perro(self):
+        datos = {"nombre": "Rex", "sexo": "hembra", "raza": "Labrador", "nacimiento": "2020-05-01", "peso_kg": "28,5", "color_senas": "Café, mancha blanca",
+                 "microchip": "9810001", "esterilizado": "", "ultimo_celo": "2026-10-01", "operaciones": "2024: cadera", "condiciones": "Artrosis",
+                 "alergias": "Pollo", "vet_nombre": "Dra. Mora", "vet_clinica": "Vet Cartago", "vet_telefono": "2551-0000",
+                 "alimentacion_tipo": "seco", "alimento_marca": "Pro Plan", "alimento_cantidad": "200 g", "alimento_tomas": "2",
+                 "alimento_horarios": "7:00 y 17:00", "restricciones_premios": "Sin pollo", "come_separado": "1",
+                 "temperamento": "ansioso", "mordidas": "Ninguno", "convivencia": "depende", "ansiedad_miedos": "Truenos",
+                 "socializacion_fecha": "2026-09-01", "socializacion_obs": "Bien", "hospedajes_anteriores": "Hotel X, bien", "bano_cada_dias": "7", "notas": "Cama propia"}
+        r = self.client.post(f"/perros/{self.perro.pk}/editar/", datos)
+        self.assertEqual(r.status_code, 302)
+        self.perro.refresh_from_db()
+        self.assertEqual((self.perro.sexo, self.perro.peso_kg, self.perro.tamano), ("hembra", Decimal("28.5"), "grande"))
+        self.assertEqual((self.perro.microchip, self.perro.alimento_tomas, self.perro.bano_cada_dias), ("9810001", 2, 7))
+        self.assertTrue(self.perro.come_separado)
+        self.assertEqual(self.perro.ultimo_celo, date(2026, 10, 1))
+        pagina = self.client.get(f"/perros/{self.perro.pk}/")
+        for texto in ("28.5 kg · Grande (25 a 45 kg)", "Dra. Mora", "Pro Plan", "Truenos", "Hotel X"):
+            self.assertContains(pagina, texto)
+        self.assertContains(self.client.get(f"/perros/{self.perro.pk}/editar/"), 'value="9810001"')
+        # el último celo solo aplica a hembras no esterilizadas
+        self.client.post(f"/perros/{self.perro.pk}/editar/", {**datos, "esterilizado": "1"})
+        self.perro.refresh_from_db()
+        self.assertIsNone(self.perro.ultimo_celo)
+
+    def test_validaciones_de_la_ficha(self):
+        for cambio in ({"nombre": ""}, {"peso_kg": "pesado"}, {"sexo": "x"}, {"nacimiento": "31/02/2020"}, {"alimento_tomas": "dos"}):
+            self.assertEqual(self.client.post(f"/perros/{self.perro.pk}/editar/", {"nombre": "Rex", **cambio}).status_code, 400, cambio)
+
+    def test_medicacion_necesidades_y_plan(self):
+        url = f"/perros/{self.perro.pk}/"
+        self.assertEqual(self.client.post(url, {"accion": "medicacion", "medicamento": "Carprofeno", "dosis": "1 tableta", "via": "pastilla",
+                                                "horario": "cada 12 h", "desde": "2026-12-01", "hasta": "2026-12-10", "con_comida": "con",
+                                                "origen": "cliente", "cantidad_recibida": "20 tabletas", "indicacion": "Receta Dra. Mora"}).status_code, 302)
+        m = self.perro.medicaciones.get()
+        self.assertEqual((m.via, m.con_comida, m.origen, m.activa), ("pastilla", "con", "cliente", True))
+        self.assertEqual(self.client.post(url, {"accion": "medicacion", "medicamento": "X", "desde": "2026-12-10", "hasta": "2026-12-01"}).status_code, 400)
+        self.assertEqual(self.client.post(url, {"accion": "medicacion", "medicamento": ""}).status_code, 400)
+        self.client.post(url, {"accion": "medicacion_activa", "id": m.pk})
+        m.refresh_from_db()
+        self.assertFalse(m.activa)
+        self.assertEqual(self.client.post(url, {"accion": "necesidad", "tipo": "movilidad", "detalle": "Perro senior, no sube escalones"}).status_code, 302)
+        self.assertEqual(self.client.post(url, {"accion": "necesidad", "tipo": "otro", "detalle": "x"}).status_code, 400)
+        self.assertEqual(self.perro.necesidades.get().get_tipo_display(), "Movilidad")
+        # un plan nuevo cierra el anterior y lo deja como histórico
+        hoy = timezone.localdate()
+        self.client.post(url, {"accion": "plan", "alimento": "Pro Plan", "origen": "cliente", "cantidad_toma": "200 g", "tomas_dia": "2",
+                               "horarios": "7:00 y 17:00", "desde": (hoy - timedelta(days=10)).isoformat(), "cantidad_recibida": "4 kg"})
+        self.client.post(url, {"accion": "plan", "alimento": "Dieta húmeda", "origen": "hotel", "cantidad_toma": "1 taza", "tomas_dia": "3",
+                               "desde": hoy.isoformat()})
+        antes, ahora = self.perro.planes.order_by("desde")
+        self.assertEqual(antes.hasta, hoy - timedelta(days=1))
+        self.assertIsNone(ahora.hasta)
+        pagina = self.client.get(url)
+        self.assertContains(pagina, "Vigente")
+        self.assertContains(pagina, "Dieta húmeda")
+        self.assertEqual(self.client.post(url, {"accion": "plan", "alimento": "X", "desde": hoy.isoformat(), "tomas_dia": "0"}).status_code, 400)
+
+    def test_ficha_del_cliente_enlaza_al_perro_y_exige_permiso(self):
+        self.assertContains(self.client.get(f"/clientes/{self.cli.pk}/"), f"/perros/{self.perro.pk}/")
+        self.client.post("/salir/")
+        entrar(self.client, "Cuidador", "cuco")
+        self.assertEqual(self.client.get(f"/perros/{self.perro.pk}/").status_code, 403)
+
+    def test_capacidad_de_la_habitacion_y_segundo_perro(self):
+        from .models import Habitacion
+        self.assertEqual([Habitacion.objects.get(numero=n).capacidad_perros for n in (1, 15, 21, 30)], [1, 1, 2, 2])
+        datos = {**self.q, "nombre": "Ana", "telefono": "1", "perro": "Rocky", "perro2": "Max"}
+        pagina = self.client.get("/reservar/1/", self.q)
+        self.assertNotContains(pagina, 'name="perro2"')
+        self.assertContains(pagina, "admite un solo perro")
+        self.assertEqual(self.client.post("/reservar/1/", datos).status_code, 400)
+        self.assertEqual(Reserva.objects.count(), 0)
+        self.assertEqual(self.client.post("/reservar/25/", datos).status_code, 302)
+        self.assertContains(self.client.get("/reservar/26/", self.q), 'name="perro2"')
+        # edición de habitación y alta de una nueva
+        h = Habitacion.objects.get(numero=1)
+        self.client.post(f"/habitaciones/{h.pk}/", {"accion": "guardar", "tarifa": "30", "tamano": "pequena", "capacidad_perros": "2", "activa": "1"})
+        h.refresh_from_db()
+        self.assertEqual(h.capacidad_perros, 2)
+        self.assertEqual(self.client.post(f"/habitaciones/{h.pk}/", {"accion": "guardar", "tarifa": "30", "capacidad_perros": "5", "activa": "1"}).status_code, 400)
+        self.client.post("/habitaciones/", {"accion": "nueva", "numero": "40", "tarifa": "50", "tamano": "grande"})
+        self.assertEqual(Habitacion.objects.get(numero=40).capacidad_perros, 2)
+
+    def test_hora_estimada_pertenencias_y_estado_fisico(self):
+        datos = {**self.q, "nombre": "Ana", "telefono": "1", "perro": "Rocky", "hora_ingreso": "09:30"}
+        self.assertEqual(self.client.post("/reservar/3/", {**datos, "hora_ingreso": "25:99"}).status_code, 400)
+        r = self.client.post("/reservar/3/", datos, follow=True)
+        self.assertContains(r, "ingreso estimado 09:30")
+        res = Reserva.objects.get()
+        self.assertEqual(res.hora_ingreso_estimada.strftime("%H:%M"), "09:30")
+        Reserva.objects.filter(pk=res.pk).update(entrada=timezone.localdate())
+        self.assertContains(self.client.get(f"/checkin/{res.pk}/"), "09:30")
+        self.client.post(f"/checkin/{res.pk}/", {"autoriza": "1", "pertenencias": "Cama y pelota", "estado_fisico": "Bien, sin heridas"})
+        res.refresh_from_db()
+        self.assertEqual((res.pertenencias, res.estado_fisico_ingreso), ("Cama y pelota", "Bien, sin heridas"))
+
+    def test_articulos_con_categoria_inventario_y_tamano(self):
+        from .models import Articulo
+        self.client.post("/articulos/", {"nombre": "Baño perro grande", "tipo": "servicio", "tamano_perro": "grande", "precio": "25"})
+        self.client.post("/articulos/", {"nombre": "Pro Plan 15 kg", "tipo": "alimento", "precio": "60", "unidad": "bolsa"})
+        self.client.post("/articulos/", {"nombre": "Antiparasitario", "tipo": "medicina"})
+        bano = Articulo.objects.get(nombre="Baño perro grande")
+        self.assertEqual((bano.tipo, bano.control_inventario, bano.tamano_perro), ("servicio", False, "grande"))
+        self.assertTrue(Articulo.objects.get(nombre="Pro Plan 15 kg").control_inventario)
+        self.assertTrue(Articulo.objects.get(nombre="Antiparasitario").control_inventario)
+        self.assertEqual(self.client.post("/articulos/", {"nombre": "Algo", "tipo": "producto"}).status_code, 400)  # ya no existe esa categoría
+        self.assertEqual(self.client.post("/articulos/", {"nombre": "Algo", "tipo": "servicio", "tamano_perro": "enorme"}).status_code, 400)
+        a = Articulo.objects.get(nombre="Pro Plan 15 kg")
+        self.client.post(f"/articulos/{a.pk}/", {"codigo": a.codigo, "nombre": a.nombre, "tipo": "habitacion", "activo": "1"})
+        a.refresh_from_db()
+        self.assertEqual((a.tipo, a.control_inventario), ("habitacion", False))
+        pagina = self.client.get("/articulos/")
+        self.assertContains(pagina, "Habitación")
+        self.assertContains(pagina, "Grande (25 a 45 kg)")

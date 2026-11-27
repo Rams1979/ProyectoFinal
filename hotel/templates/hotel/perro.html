@@ -1,0 +1,92 @@
+{% extends "hotel/base.html" %}
+{% block contenido %}
+  <h2>{{ p.nombre }}</h2>
+  <p>Dueño: <a href="{% url 'cliente' p.cliente.pk %}">{{ p.cliente.nombre }}</a> · {{ p.cliente.telefono }} · <a href="{% url 'perro_editar' p.pk %}">Editar ficha</a>
+    {% if p.tamano_texto %}<br><strong>{{ p.tamano_texto }}</strong>{% else %}<br><span class="aviso">Sin peso registrado: no se sabe qué habitación necesita.</span>{% endif %}</p>
+  {% if error %}<p class="error">{{ error }}</p>{% endif %}
+
+  {% for grupo, filas in grupos %}{% if filas %}
+    <h3>{{ grupo }}</h3>
+    <table>{% for etiqueta, valor in filas %}<tr><th style="width:34%">{{ etiqueta }}</th><td>{{ valor }}</td></tr>{% endfor %}</table>
+  {% endif %}{% endfor %}
+
+  <h3>Vacunas y requisitos sanitarios</h3>
+  <table>
+    <tr><th>Requisito</th><th>Estado</th><th>Vence</th></tr>
+    {% for f in requisitos %}<tr><td>{{ f.etiqueta }}</td><td>{% if f.estado == "vigente" %}Vigente{% elif f.estado == "vencida" %}Vencida{% else %}Sin registro{% endif %}</td><td>{{ f.vence|date:"d/m/Y"|default:"—" }}</td></tr>{% endfor %}
+  </table>
+  <p class="nota">Las vacunas se registran en la <a href="{% url 'cliente' p.cliente.pk %}">ficha del cliente</a>.</p>
+
+  <h3>Necesidades especiales</h3>
+  <table>
+    <tr><th>Tipo</th><th>Detalle</th><th></th></tr>
+    {% for n in p.necesidades.all %}
+      <tr{% if not n.activa %} class="hecha"{% endif %}><td>{{ n.get_tipo_display }}</td><td>{{ n.detalle }}</td>
+        <td><form class="en-linea" method="post">{% csrf_token %}<input type="hidden" name="accion" value="necesidad_activa"><input type="hidden" name="id" value="{{ n.pk }}"><button class="chico" type="submit">{% if n.activa %}Quitar{% else %}Reactivar{% endif %}</button></form></td></tr>
+    {% empty %}<tr><td colspan="3">Sin necesidades especiales.</td></tr>{% endfor %}
+  </table>
+  <form class="filtros" method="post">
+    {% csrf_token %}<input type="hidden" name="accion" value="necesidad">
+    <label>Tipo <select name="tipo">{% for k, e in necesidades_tipos %}<option value="{{ k }}">{{ e }}</option>{% endfor %}</select></label>
+    <label>Detalle <input name="detalle" maxlength="250" required></label>
+    <button type="submit">Agregar necesidad</button>
+  </form>
+
+  <h3>Medicación</h3>
+  <table>
+    <tr><th>Medicamento</th><th>Dosis y vía</th><th>Horario</th><th>Vigencia</th><th>Origen</th><th></th></tr>
+    {% for m in p.medicaciones.all %}
+      <tr{% if not m.activa %} class="hecha"{% endif %}>
+        <td>{{ m.medicamento }}{% if m.indicacion %}<br><small>{{ m.indicacion }}</small>{% endif %}</td>
+        <td>{{ m.dosis }}{% if m.via %} · {{ m.get_via_display }}{% endif %}<br><small>{{ m.get_con_comida_display }}</small></td>
+        <td>{{ m.horario }}</td>
+        <td>{% if m.desde %}{{ m.desde|date:"d/m" }}{% endif %}{% if m.hasta %} a {{ m.hasta|date:"d/m" }}{% endif %}</td>
+        <td>{{ m.get_origen_display }}{% if m.cantidad_recibida %}<br><small>Recibido: {{ m.cantidad_recibida }}</small>{% endif %}</td>
+        <td><form class="en-linea" method="post">{% csrf_token %}<input type="hidden" name="accion" value="medicacion_activa"><input type="hidden" name="id" value="{{ m.pk }}"><button class="chico" type="submit">{% if m.activa %}Suspender{% else %}Reactivar{% endif %}</button></form></td></tr>
+    {% empty %}<tr><td colspan="6">Sin medicación registrada.</td></tr>{% endfor %}
+  </table>
+  <form class="filtros" method="post">
+    {% csrf_token %}<input type="hidden" name="accion" value="medicacion">
+    <label>Medicamento <input name="medicamento" maxlength="120" required></label>
+    <label>Dosis <input name="dosis" maxlength="80"></label>
+    <label>Vía <select name="via"><option value="">—</option>{% for k, e in vias %}<option value="{{ k }}">{{ e }}</option>{% endfor %}</select></label>
+    <label>Horario (cada cuántas horas) <input name="horario" maxlength="80"></label>
+    <label>Desde <input type="date" name="desde"></label>
+    <label>Hasta <input type="date" name="hasta"></label>
+    <label>Administración <select name="con_comida">{% for k, e in comidas %}<option value="{{ k }}"{% if k == "indiferente" %} selected{% endif %}>{{ e }}</option>{% endfor %}</select></label>
+    <label>Origen <select name="origen">{% for k, e in origenes %}<option value="{{ k }}">{{ e }}</option>{% endfor %}</select></label>
+    <label>Cantidad recibida <input name="cantidad_recibida" maxlength="60"></label>
+    <label>Indicación médica <input name="indicacion" maxlength="250"></label>
+    <button type="submit">Agregar medicación</button>
+  </form>
+  <p class="nota">Si el origen es el hotel, se cobra como producto. El registro de cada administración (hora, quién y resultado) queda pendiente.</p>
+
+  <h3>Plan de alimentación</h3>
+  <table>
+    <tr><th>Alimento</th><th>Cantidad y tomas</th><th>Vigencia</th><th>Detalles</th></tr>
+    {% for x in planes %}
+      <tr{% if x != plan_vigente %} class="hecha"{% endif %}>
+        <td>{{ x.alimento }}<br><small>{{ x.get_origen_display }}{% if x.cantidad_recibida %} · recibido: {{ x.cantidad_recibida }}{% endif %}</small></td>
+        <td>{{ x.cantidad_toma }} · {{ x.tomas_dia }} toma{{ x.tomas_dia|pluralize }}{% if x.horarios %} ({{ x.horarios }}){% endif %}</td>
+        <td>{{ x.desde|date:"d/m/Y" }}{% if x.hasta %} a {{ x.hasta|date:"d/m/Y" }}{% else %} en adelante{% endif %}{% if x == plan_vigente %}<br><strong>Vigente</strong>{% endif %}</td>
+        <td>{% if x.complementos %}Complementos: {{ x.complementos }}<br>{% endif %}{% if x.restricciones %}Restricciones: {{ x.restricciones }}<br>{% endif %}{{ x.instrucciones }}</td></tr>
+    {% empty %}<tr><td colspan="4">Sin plan de alimentación.</td></tr>{% endfor %}
+  </table>
+  <form class="filtros" method="post">
+    {% csrf_token %}<input type="hidden" name="accion" value="plan">
+    <label>Alimento <input name="alimento" maxlength="120" required></label>
+    <label>Origen <select name="origen">{% for k, e in origenes %}<option value="{{ k }}">{{ e }}</option>{% endfor %}</select></label>
+    <label>Cantidad por toma <input name="cantidad_toma" maxlength="40"></label>
+    <label>Tomas por día <input name="tomas_dia" inputmode="numeric" value="2" required></label>
+    <label>Horarios <input name="horarios" maxlength="100"></label>
+    <label>Desde <input type="date" name="desde" value="{{ hoy|date:'Y-m-d' }}" required></label>
+    <label>Hasta (opcional) <input type="date" name="hasta"></label>
+    <label>Complementos y premios <input name="complementos" maxlength="200"></label>
+    <label>Restricciones y alergias <input name="restricciones" maxlength="200"></label>
+    <label>Instrucciones <input name="instrucciones" maxlength="250"></label>
+    <label>Cantidad recibida (si es del cliente) <input name="cantidad_recibida" maxlength="60"></label>
+    <button type="submit">Crear plan nuevo</button>
+  </form>
+  <p class="nota">Un cambio crea un plan nuevo y el anterior queda cerrado como histórico.</p>
+  <p><a href="{% url 'cliente' p.cliente.pk %}">Volver al cliente</a></p>
+{% endblock %}

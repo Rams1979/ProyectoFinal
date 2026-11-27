@@ -1,5 +1,5 @@
 import json
-from datetime import date, time
+from datetime import date, time, timedelta
 from decimal import Decimal, InvalidOperation
 
 from django.contrib.auth import authenticate, login, logout, update_session_auth_hash
@@ -9,18 +9,19 @@ from django.contrib.auth.password_validation import validate_password
 from django.conf import settings
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.core.validators import validate_email
-from django.db import transaction
+from django.db import models as dj_models, transaction
 from django.db.models import Q, Sum
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
+from django.utils.text import capfirst
 from django.views.decorators.http import require_POST
 
 from .chat import responder as chat_responder
 from . import acceso, reportes as rep
 from .disponibilidad import habitaciones_libres
 from .permisos import con_area, es_administrador, personal, puede, rol
-from .models import (AREAS, Articulo, BloqueoHabitacion, Cliente, Habitacion, ItemPlan, Pago, Perfil, PerfilUsuario,
+from .models import (AREAS, Articulo, BloqueoHabitacion, Cliente, Habitacion, ItemPlan, Medicacion, NecesidadEspecial, PlanAlimentacion, Pago, Perfil, PerfilUsuario,
                      Perro, Reserva, SolicitudContacto, Tarea, Vacuna)
 
 
@@ -115,6 +116,13 @@ def reservar(request, habitacion_id):
     telefono = datos.get("telefono", "").strip()
     perro_nombre = datos.get("perro", "").strip()[:80]
     perro2_nombre = datos.get("perro2", "").strip()[:80]
+    hora_txt = datos.get("hora_ingreso", "").strip()
+    try:
+        hora_ingreso = time.fromisoformat(hora_txt) if hora_txt else None
+    except ValueError:
+        hora_ingreso = None
+        contexto["error"] = "La hora estimada de ingreso no es válida."
+    contexto["hora_ingreso"] = hora_txt
     recargo = Decimal(settings.RECARGO_SEGUNDO_PERRO) / 100
 
     with transaction.atomic():
@@ -130,11 +138,16 @@ def reservar(request, habitacion_id):
             contexto["error"] = "Esa habitación es demasiado pequeña para el perro. Elija una de su tamaño o mayor."
             contexto["bloqueado"] = True
             return render(request, "hotel/reservar.html", contexto, status=400)
+        if perro2_nombre and habitacion.capacidad_perros < 2:
+            contexto["error"] = "Esa habitación admite un solo perro. Para dos perros elija una habitación grande."
+            return render(request, "hotel/reservar.html", contexto, status=400)
         if not libre:
             contexto["error"] = "Esa habitación ya no está libre para esas fechas. Elija otra."
             contexto["bloqueado"] = True
             return render(request, "hotel/reservar.html", contexto, status=409)
         if request.method == "POST":
+            if contexto.get("error"):
+                return render(request, "hotel/reservar.html", contexto, status=400)
             if not nombre or not telefono:
                 contexto["error"] = "Escriba su nombre y su teléfono."
                 return render(request, "hotel/reservar.html", contexto, status=400)
@@ -150,7 +163,7 @@ def reservar(request, habitacion_id):
             reserva = Reserva.objects.create(
                 habitacion=habitacion, nombre=nombre, telefono=telefono, entrada=entrada, salida=salida,
                 cliente=cliente, perro_ref=perro_ref, perro=perro_nombre,
-                perro2_ref=perro2_ref, perro2=perro2_nombre,
+                perro2_ref=perro2_ref, perro2=perro2_nombre, hora_ingreso_estimada=hora_ingreso,
                 creada_por=request.user if rol(request.user) else None,
             )
             propias = request.session.get("reservas_propias", [])
@@ -277,6 +290,8 @@ def checkin(request, reserva_id):
             if reserva.perro2 and reserva.perro2_ref is None and reserva.cliente:
                 reserva.perro2_ref = reserva.cliente.perros.filter(nombre__iexact=reserva.perro2).first() or \
                     Perro.objects.create(cliente=reserva.cliente, nombre=reserva.perro2)
+            reserva.pertenencias = request.POST.get("pertenencias", "").strip()[:250]
+            reserva.estado_fisico_ingreso = request.POST.get("estado_fisico", "").strip()[:250]
             reserva.estado = Reserva.ACTIVA
             reserva.perro = perro[:80]
             reserva.checkin_en = timezone.now()
@@ -432,6 +447,176 @@ def cliente(request, cliente_id):
     return render(request, "hotel/cliente.html",
                   {"c": c, "perros": perros, "tipos": Vacuna.TIPOS, "error": error, "hoy": hoy},
                   status=400 if error else 200)
+
+
+# ---------------------------------------------------------------- ficha del perro (CU-03) y CU-05 / CU-07
+def _leer_campos(datos, modelo, campos, actual=None):
+    """Lee y valida los campos de un formulario según el tipo de cada campo del modelo. Devuelve (valores, error)."""
+    valores = {}
+    for nombre in campos:
+        f = modelo._meta.get_field(nombre)
+        etiqueta = str(f.verbose_name)
+        if isinstance(f, dj_models.BooleanField):
+            valores[nombre] = datos.get(nombre) == "1"
+            continue
+        crudo = datos.get(nombre)
+        if crudo is None:  # el formulario no lo trae: se conserva o toma su valor por defecto
+            valores[nombre] = getattr(actual, nombre) if actual is not None else f.get_default()
+            continue
+        crudo = crudo.strip()
+        if f.choices:
+            if crudo == "" and not f.blank:
+                crudo = f.get_default()
+            if crudo != "" and crudo not in dict(f.choices):
+                return valores, f"Elija una opción válida en «{etiqueta}»."
+            valores[nombre] = crudo
+        elif isinstance(f, dj_models.DateField):
+            valores[nombre] = _fecha(crudo) if crudo else None
+            if crudo and valores[nombre] is None:
+                return valores, f"La fecha de «{etiqueta}» no es válida."
+        elif isinstance(f, dj_models.DecimalField):
+            v, ok = _decimal(crudo, permitir_vacio=True)
+            if not ok:
+                return valores, f"«{etiqueta}» no es un número válido."
+            valores[nombre] = v
+        elif isinstance(f, dj_models.PositiveSmallIntegerField):
+            if crudo and not crudo.isdigit():
+                return valores, f"«{etiqueta}» debe ser un número entero."
+            valores[nombre] = int(crudo) if crudo else (f.get_default() if not f.null else None)
+        else:
+            valores[nombre] = crudo[:f.max_length] if f.max_length else crudo[:2000]
+    return valores, None
+
+
+PERRO_GRUPOS = [
+    ("Identificación", ["nombre", "sexo", "raza", "nacimiento", "peso_kg", "color_senas", "microchip", "esterilizado"]),
+    ("Salud", ["ultimo_celo", "operaciones", "condiciones", "alergias", "vet_nombre", "vet_clinica", "vet_telefono"]),
+    ("Alimentación habitual", ["alimentacion_tipo", "alimento_marca", "alimento_cantidad", "alimento_tomas", "alimento_horarios",
+                               "restricciones_premios", "come_separado"]),
+    ("Comportamiento", ["temperamento", "mordidas", "convivencia", "ansiedad_miedos", "socializacion_fecha", "socializacion_obs",
+                        "hospedajes_anteriores"]),
+    ("Cuidado", ["bano_cada_dias", "notas"]),
+]
+
+
+def _campos_formulario(modelo, nombres, valores):
+    """Describe cada campo para dibujar el formulario: etiqueta, tipo de control, opciones y valor actual."""
+    filas = []
+    for n in nombres:
+        f = modelo._meta.get_field(n)
+        if isinstance(f, dj_models.BooleanField):
+            tipo = "check"
+        elif f.choices:
+            tipo = "select"
+        elif isinstance(f, dj_models.DateField):
+            tipo = "date"
+        elif isinstance(f, dj_models.TextField):
+            tipo = "area"
+        else:
+            tipo = "text"
+        v = valores.get(n) if isinstance(valores, dict) else getattr(valores, n, None)
+        if tipo == "date" and v:
+            v = v.isoformat() if hasattr(v, "isoformat") else v
+        filas.append({"nombre": n, "etiqueta": capfirst(str(f.verbose_name)), "tipo": tipo, "valor": "" if v is None else v,
+                      "opciones": f.choices if tipo == "select" else None, "largo": f.max_length})
+    return filas
+
+
+@con_area("clientes")
+def perro_editar(request, perro_id):
+    p = get_object_or_404(Perro.objects.select_related("cliente"), pk=perro_id)
+    error, datos = None, request.POST if request.method == "POST" else None
+    todos = [n for _, ns in PERRO_GRUPOS for n in ns]
+    if request.method == "POST":
+        v, error = _leer_campos(request.POST, Perro, todos, actual=p)
+        if not error and not v["nombre"]:
+            error = "Escriba el nombre del perro."
+        if not error:
+            if not (v["sexo"] == "hembra" and not v["esterilizado"]):
+                v["ultimo_celo"] = None  # solo aplica a hembras no esterilizadas
+            for k, x in v.items():
+                setattr(p, k, x)
+            p.save()
+            return redirect("perro", perro_id=p.pk)
+    valores = request.POST if datos else p
+    grupos = [(g, _campos_formulario(Perro, ns, {n: valores.get(n) for n in ns} if datos else p)) for g, ns in PERRO_GRUPOS]
+    return render(request, "hotel/perro_editar.html", {"p": p, "grupos": grupos, "error": error}, status=400 if error else 200)
+
+
+@con_area("clientes")
+def perro(request, perro_id):
+    p = get_object_or_404(Perro.objects.select_related("cliente").prefetch_related("vacunas", "medicaciones", "necesidades", "planes"), pk=perro_id)
+    hoy = timezone.localdate()
+    error = None
+    if request.method == "POST":
+        accion = request.POST.get("accion")
+        if accion == "medicacion":
+            v, error = _leer_campos(request.POST, Medicacion, ["medicamento", "dosis", "via", "horario", "desde", "hasta", "con_comida",
+                                                                 "origen", "cantidad_recibida", "indicacion"])
+            if not error and not v["medicamento"]:
+                error = "Escriba el nombre del medicamento."
+            elif not error and v["desde"] and v["hasta"] and v["hasta"] < v["desde"]:
+                error = "La medicación no puede terminar antes de empezar."
+            if not error:
+                Medicacion.objects.create(perro=p, **v)
+                return redirect("perro", perro_id=p.pk)
+        elif accion == "necesidad":
+            v, error = _leer_campos(request.POST, NecesidadEspecial, ["tipo", "detalle"])
+            if not error and (not v["tipo"] or not v["detalle"]):
+                error = "Indique el tipo y el detalle de la necesidad."
+            if not error:
+                NecesidadEspecial.objects.create(perro=p, **v)
+                return redirect("perro", perro_id=p.pk)
+        elif accion == "plan":
+            v, error = _leer_campos(request.POST, PlanAlimentacion, ["alimento", "origen", "cantidad_toma", "tomas_dia", "horarios", "desde",
+                                                                      "hasta", "complementos", "restricciones", "instrucciones", "cantidad_recibida"])
+            if not error and not v["alimento"]:
+                error = "Escriba el alimento del plan."
+            elif not error and not v["desde"]:
+                error = "Indique desde qué fecha rige el plan."
+            elif not error and v["hasta"] and v["hasta"] < v["desde"]:
+                error = "El plan no puede terminar antes de empezar."
+            elif not error and v["tomas_dia"] < 1:
+                error = "Las tomas por día deben ser al menos 1."
+            if not error:
+                with transaction.atomic():  # un cambio crea un plan nuevo y cierra el anterior, que queda como histórico
+                    p.planes.filter(hasta__isnull=True, desde__lt=v["desde"]).update(hasta=v["desde"] - timedelta(days=1))
+                    PlanAlimentacion.objects.create(perro=p, **v)
+                return redirect("perro", perro_id=p.pk)
+        elif accion in ("medicacion_activa", "necesidad_activa"):
+            modelo = Medicacion if accion == "medicacion_activa" else NecesidadEspecial
+            obj = get_object_or_404(modelo, pk=request.POST.get("id"), perro=p)
+            obj.activa = not obj.activa
+            obj.save()
+            return redirect("perro", perro_id=p.pk)
+    planes = list(p.planes.all())
+    vigente = next((x for x in planes if x.desde <= hoy and (x.hasta is None or x.hasta >= hoy)), None)
+    contexto = {"p": p, "hoy": hoy, "error": error, "datos": request.POST if error else {},
+                "requisitos": p.requisitos(hoy), "planes": planes, "plan_vigente": vigente,
+                "vias": Medicacion.VIAS, "comidas": Medicacion.COMIDA, "origenes": Medicacion.ORIGENES, "necesidades_tipos": NecesidadEspecial.TIPOS}
+    grupos = []
+    for g, ns in PERRO_GRUPOS:
+        filas = [(capfirst(str(Perro._meta.get_field(n).verbose_name)), _mostrar(p, n)) for n in ns if n != "nombre"]
+        grupos.append((g, [f for f in filas if f[1]]))
+    contexto["grupos"] = grupos
+    return render(request, "hotel/perro.html", contexto, status=400 if error else 200)
+
+
+def _mostrar(obj, nombre):
+    """Valor de un campo para mostrarlo en la ficha; vacío si no tiene dato."""
+    f = obj._meta.get_field(nombre)
+    v = getattr(obj, nombre)
+    if isinstance(f, dj_models.BooleanField):
+        return "Sí" if v else ""
+    if v in (None, ""):
+        return ""
+    if f.choices:
+        return getattr(obj, f"get_{nombre}_display")()
+    if isinstance(f, dj_models.DateField):
+        return v.strftime("%d/%m/%Y")
+    if nombre == "peso_kg":
+        return f"{v} kg · {obj.tamano_texto}"
+    return str(v)
 
 
 def login_vista(request):
@@ -681,6 +866,8 @@ def editar_reserva(request, reserva_id):
                     error = "Elija una habitación."
                 elif not habitaciones_libres(nueva_entrada, nueva_salida, excluir=reserva.pk).filter(pk=habitacion.pk).exists():
                     error = "Esa habitación no está libre en esas fechas."
+                elif perro2 and habitacion.capacidad_perros < 2:
+                    error = "Esa habitación admite un solo perro; con segundo perro elija una grande."
             if error:
                 contexto.update(error=error, datos=d, libres=_libres_para_editar(reserva, nueva_entrada, nueva_salida))
                 return render(request, "hotel/editar.html", contexto, status=409 if "libre" in error else 400)
@@ -872,8 +1059,12 @@ def habitaciones(request):
                 error = "Escriba una tarifa mayor que cero."
             elif datos.get("tamano", "mediana") not in dict(Habitacion.TAMANOS):
                 error = "Elija el tamaño de la habitación."
+            elif datos.get("capacidad_perros", "") not in ("", "1", "2"):
+                error = "La capacidad debe ser de 1 o 2 perros."
             else:
-                Habitacion.objects.create(numero=int(numero), tarifa_noche=tarifa, tamano=datos.get("tamano", "mediana"))
+                tam = datos.get("tamano", "mediana")
+                capacidad = int(datos.get("capacidad_perros") or (2 if tam == "grande" else 1))  # las grandes admiten 2
+                Habitacion.objects.create(numero=int(numero), tarifa_noche=tarifa, tamano=tam, capacidad_perros=capacidad)
                 return redirect("habitaciones")
         elif accion == "tarifa_todas":
             if not ok or not tarifa:
@@ -905,11 +1096,14 @@ def habitacion_editar(request, habitacion_id):
                     error = "Escriba una tarifa mayor que cero."
                 elif datos.get("tamano", h.tamano) not in dict(Habitacion.TAMANOS):
                     error = "Elija el tamaño de la habitación."
+                elif datos.get("capacidad_perros", str(h.capacidad_perros)) not in ("1", "2"):
+                    error = "La capacidad debe ser de 1 o 2 perros."
                 elif not activa and vigentes:
                     error, conflicto = f"No se puede desactivar: tiene {vigentes} reserva(s) vigente(s). Cancélelas o muévalas primero.", True
                 else:
                     h.tarifa_noche, h.activa, h.nota = tarifa, activa, datos.get("nota", "").strip()[:200]
                     h.tamano = datos.get("tamano", h.tamano)
+                    h.capacidad_perros = int(datos.get("capacidad_perros", h.capacidad_perros))
                     h.save()
                     return redirect("habitaciones")
             elif accion == "bloqueo":
@@ -950,16 +1144,19 @@ def articulos(request):
         precio, ok = _decimal(datos.get("precio"), permitir_vacio=True)
         codigo = datos.get("codigo", "").strip()[:20] or _codigo_nuevo()
         if not nombre or tipo not in dict(Articulo.TIPOS):
-            error = "Indique nombre y tipo."
+            error = "Indique nombre y categoría."
+        elif datos.get("tamano_perro", "") not in dict(Habitacion.TAMANOS_PERRO) and datos.get("tamano_perro", ""):
+            error = "Elija un tamaño de perro válido."
         elif not ok:
             error = "El precio no es válido (déjelo vacío si está por definir)."
         elif Articulo.objects.filter(codigo__iexact=codigo).exists():
             error = "Ya existe un artículo con ese código."
         else:
-            Articulo.objects.create(codigo=codigo, nombre=nombre, tipo=tipo, precio=precio,
+            Articulo.objects.create(codigo=codigo, nombre=nombre, tipo=tipo, precio=precio, control_inventario=tipo in Articulo.CON_INVENTARIO,
+                                    tamano_perro=datos.get("tamano_perro", ""),
                                     descripcion=datos.get("descripcion", "").strip()[:200], unidad=datos.get("unidad", "").strip()[:30])
             return redirect("articulos")
-    return render(request, "hotel/articulos.html", {"lista": Articulo.objects.all(), "tipos": Articulo.TIPOS,
+    return render(request, "hotel/articulos.html", {"lista": Articulo.objects.all(), "tipos": Articulo.TIPOS, "tamanos_perro": Habitacion.TAMANOS_PERRO,
                   "error": error, "datos": datos}, status=400 if error else 200)
 
 
@@ -972,18 +1169,21 @@ def articulo_editar(request, articulo_id):
         precio, ok = _decimal(datos.get("precio"), permitir_vacio=True)
         codigo = datos.get("codigo", "").strip()[:20]
         if not nombre or tipo not in dict(Articulo.TIPOS) or not codigo:
-            error = "Indique código, nombre y tipo."
+            error = "Indique código, nombre y categoría."
+        elif datos.get("tamano_perro", "") and datos.get("tamano_perro") not in dict(Habitacion.TAMANOS_PERRO):
+            error = "Elija un tamaño de perro válido."
         elif not ok:
             error = "El precio no es válido (déjelo vacío si está por definir)."
         elif Articulo.objects.filter(codigo__iexact=codigo).exclude(pk=a.pk).exists():
             error = "Ya existe un artículo con ese código."
         else:
             a.codigo, a.nombre, a.tipo, a.precio = codigo, nombre, tipo, precio
+            a.control_inventario, a.tamano_perro = tipo in Articulo.CON_INVENTARIO, datos.get("tamano_perro", "")
             a.descripcion, a.unidad = datos.get("descripcion", "").strip()[:200], datos.get("unidad", "").strip()[:30]
             a.activo = datos.get("activo") == "1"
             a.save()
             return redirect("articulos")
-    return render(request, "hotel/articulo_editar.html", {"a": a, "tipos": Articulo.TIPOS, "error": error, "datos": datos},
+    return render(request, "hotel/articulo_editar.html", {"a": a, "tipos": Articulo.TIPOS, "tamanos_perro": Habitacion.TAMANOS_PERRO, "error": error, "datos": datos},
                   status=400 if error else 200)
 
 

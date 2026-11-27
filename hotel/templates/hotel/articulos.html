@@ -3,9 +3,9 @@
   <h2>Artículos y precios</h2>
   {% if error %}<p class="error">{{ error }}</p>{% endif %}
   <table>
-    <tr><th>Código</th><th>Nombre</th><th>Tipo</th><th>Precio</th><th>Estado</th><th></th></tr>
+    <tr><th>Código</th><th>Nombre</th><th>Categoría</th><th>Inventario</th><th>Precio</th><th>Estado</th><th></th></tr>
     {% for a in lista %}
-      <tr><td>{{ a.codigo }}</td><td>{{ a.nombre }}{% if a.descripcion %}<br><small>{{ a.descripcion }}</small>{% endif %}</td><td>{{ a.get_tipo_display }}</td>
+      <tr><td>{{ a.codigo }}</td><td>{{ a.nombre }}{% if a.descripcion %}<br><small>{{ a.descripcion }}</small>{% endif %}</td><td>{{ a.get_tipo_display }}{% if a.tamano_perro %}<br><small>{{ a.get_tamano_perro_display }}</small>{% endif %}</td><td>{% if a.control_inventario %}Sí{% else %}No{% endif %}</td>
         <td>{% if a.precio is not None %}${{ a.precio }}{% if a.unidad %} {{ a.unidad }}{% endif %}{% else %}Por definir{% endif %}</td>
         <td>{% if a.activo %}Activo{% else %}Inactivo{% endif %}</td><td><a href="{% url 'articulo_editar' a.pk %}">Editar</a></td></tr>
     {% endfor %}
@@ -15,7 +15,8 @@
     {% csrf_token %}
     <label>Código (opcional) <input name="codigo" maxlength="20" value="{{ datos.codigo }}"></label>
     <label>Nombre <input name="nombre" maxlength="120" value="{{ datos.nombre }}" required></label>
-    <label>Tipo <select name="tipo">{% for k, v in tipos %}<option value="{{ k }}">{{ v }}</option>{% endfor %}</select></label>
+    <label>Categoría <select name="tipo">{% for k, v in tipos %}<option value="{{ k }}">{{ v }}</option>{% endfor %}</select></label>
+    <label>Tamaño de perro (si el precio depende de él) <select name="tamano_perro"><option value="">No aplica</option>{% for k, v in tamanos_perro %}<option value="{{ k }}">{{ v }}</option>{% endfor %}</select></label>
     <label>Precio (USD, vacío si está por definir) <input name="precio" inputmode="decimal" value="{{ datos.precio }}"></label>
     <label>Unidad (por hora, por baño...) <input name="unidad" maxlength="30" value="{{ datos.unidad }}"></label>
     <label>Descripción <input name="descripcion" maxlength="200" value="{{ datos.descripcion }}"></label>

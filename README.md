@@ -54,6 +54,10 @@ Prototipo con datos de ejemplo (no es un sistema para operar el hotel). Django +
 - `/articulos/`: código, nombre, tipo (servicio o producto), unidad, precio y activo. Vienen cargados los 10 servicios del hotel con el precio por definir. Sin inventario ni facturación.
 - El chat lee la tarifa por noche y esta lista en cada respuesta: lo que no tiene precio lo deriva a la persona de turno.
 
+## Fichas completas
+- Perro (`/perros/<id>/` y `/editar/`): identificación, salud, alimentación habitual, comportamiento y cuidado; el peso define el tamaño. En la misma página: necesidades especiales, medicación y plan de alimentación con histórico.
+- Habitación: capacidad de perros (1; las grandes 2). Artículo: categoría, inventario y tamaño de perro. Reserva: hora estimada de ingreso, pertenencias y estado físico en el check-in.
+
 ## Maestro de clientes ampliado
 - `/clientes/nuevo/` y `/clientes/<id>/editar/` usan un formulario con los campos del CU-02; la ficha del cliente los muestra. El descuento solo lo cambia el administrador.
 

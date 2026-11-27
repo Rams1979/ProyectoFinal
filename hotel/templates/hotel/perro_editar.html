@@ -1,0 +1,30 @@
+{% extends "hotel/base.html" %}
+{% block contenido %}
+  <h2>Ficha de {{ p.nombre }}</h2>
+  <p class="nota">Dueño: <a href="{% url 'cliente' p.cliente.pk %}">{{ p.cliente.nombre }}</a>. El peso define el tamaño del perro y las habitaciones que puede ocupar.</p>
+  {% if error %}<p class="error">{{ error }}</p>{% endif %}
+  <form method="post">
+    {% csrf_token %}
+    {% for grupo, campos in grupos %}
+      <h3>{{ grupo }}</h3>
+      <div class="filtros">
+        {% for f in campos %}
+          {% if f.tipo == "check" %}
+            <label><input type="checkbox" name="{{ f.nombre }}" value="1"{% if f.valor %} checked{% endif %}> {{ f.etiqueta }}</label>
+          {% elif f.tipo == "select" %}
+            <label>{{ f.etiqueta }} <select name="{{ f.nombre }}"><option value="">—</option>{% for k, e in f.opciones %}<option value="{{ k }}"{% if k == f.valor %} selected{% endif %}>{{ e }}</option>{% endfor %}</select></label>
+          {% elif f.tipo == "date" %}
+            <label>{{ f.etiqueta }} <input type="date" name="{{ f.nombre }}" value="{{ f.valor }}"></label>
+          {% elif f.tipo == "area" %}
+            <label>{{ f.etiqueta }} <textarea name="{{ f.nombre }}" rows="2">{{ f.valor }}</textarea></label>
+          {% else %}
+            <label>{{ f.etiqueta }} <input name="{{ f.nombre }}"{% if f.largo %} maxlength="{{ f.largo }}"{% endif %} value="{{ f.valor }}"{% if f.nombre == "nombre" %} required{% endif %}></label>
+          {% endif %}
+        {% endfor %}
+      </div>
+    {% endfor %}
+    <p class="nota">La foto y el carnet adjunto quedan pendientes: requieren un almacenamiento de archivos.</p>
+    <p><button type="submit">Guardar ficha</button></p>
+  </form>
+  <p><a href="{% url 'perro' p.pk %}">Volver a la ficha</a></p>
+{% endblock %}
