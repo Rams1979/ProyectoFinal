@@ -1,7 +1,5 @@
 {% extends "hotel/base.html" %}
-{% load static %}
 {% block contenido %}
-  <img class="logo-grande" src="{% static logo %}" alt="Inu no Hoteru 犬のホテル, hotel para perros">
   <h2>Ingreso del personal</h2>
   {% if error %}<p class="error">{{ error }}</p>{% endif %}
   <form class="filtros" method="post">
