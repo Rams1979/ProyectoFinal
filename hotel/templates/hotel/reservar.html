@@ -12,8 +12,10 @@
       <input type="hidden" name="entrada" value="{{ entrada_txt }}">
       <input type="hidden" name="salida" value="{{ salida_txt }}">
       <input type="hidden" name="perro_tam" value="{{ perro_tam }}">
+      {% if grupo %}<input type="hidden" name="grupo" value="{{ grupo }}">
+      <p class="nota">Otro perro de {{ nombre }} ({{ telefono }}) en otra habitación. Cada habitación admite máximo 2 perros.</p>{% else %}
       <label>Nombre completo <input name="nombre" value="{{ nombre }}" required></label>
-      <label>Teléfono <input name="telefono" value="{{ telefono }}" required></label>
+      <label>Teléfono <input name="telefono" value="{{ telefono }}" required></label>{% endif %}
       <label>Hora estimada de ingreso <input type="time" name="hora_ingreso" value="{{ hora_ingreso }}"></label>
       <label>Nombre del perro <input name="perro" value="{{ perro }}" maxlength="80"></label>
       {% if habitacion.capacidad_perros > 1 %}<label>Segundo perro, misma habitación (opcional) <input name="perro2" value="{{ perro2 }}" maxlength="80"></label>{% endif %}

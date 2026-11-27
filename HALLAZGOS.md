@@ -48,6 +48,7 @@ Se completan en `hotel/conocimiento.md`.
 - El repositorio es público y contiene el teléfono y correo del hotel.
 - Dos reservas simultáneas de la misma habitación se evitan bloqueando la fila (PostgreSQL); en SQLite local no aplica el bloqueo.
 - No hay cancelación ni edición de reservas.
+- Reserva grupal: más de dos perros del mismo cliente se reservan en varias habitaciones (máximo 2 por habitación, el segundo con recargo); desde la confirmación, «Agregar otro perro en otra habitación» enlaza la nueva reserva con la primera (`principal`) y la confirmación muestra el total del grupo. Un perro no puede tener dos reservas que se traslapen. Cada habitación sigue siendo una reserva, así que check-in, cuidado, pagos y reportes no cambian.
 - `datos_demo` genera datos ficticios (60 clientes con teléfono 8800-xxxx, mascotas con vacunas y plan, unos 580 reservas de 6 meses atrás a 45 días adelante, pagos y registros de cuidado) para probar reportes y Power BI; `--reemplazar` los regenera y se niega si hay clientes reales. `limpiar_demo` borra las reservas y solicitudes de prueba antes de la demostración (`python manage.py limpiar_demo`).
 
 - Etapa 6: los requisitos sanitarios (5 tipos) son los del chat; la versión final del veterinario sigue POR DEFINIR. Sin adjuntar carné ni fotos. Clientes identificados solo por teléfono, sin edición ni borrado.

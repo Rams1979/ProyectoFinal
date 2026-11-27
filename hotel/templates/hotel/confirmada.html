@@ -10,5 +10,13 @@
   {% elif reserva.estado == "confirmada" %}
     <form method="post" action="{% url 'cancelar' reserva.pk %}" onsubmit="return confirm('¿Cancelar esta reserva?')">{% csrf_token %}<button type="submit">Cancelar reserva</button></form>
   {% endif %}
+  {% if grupo %}
+    <h3>Reserva grupal</h3>
+    <table><tr><th>Habitación</th><th>Mascotas</th><th>Total</th></tr>
+      {% for r in grupo %}<tr><td>{{ r.habitacion }}</td><td>{{ r.mascotas_texto|capfirst }}</td><td>${{ r.total|floatformat:0 }}{% if r.estado == "cancelada" %} (cancelada){% endif %}</td></tr>{% endfor %}
+    </table>
+    <p>Total del grupo: ${{ total_grupo|floatformat:0 }}</p>
+  {% endif %}
+  {% if reserva.estado != "cancelada" %}<p><a class="boton" href="{% url 'disponibilidad' %}?entrada={{ reserva.entrada|date:'Y-m-d' }}&salida={{ reserva.salida|date:'Y-m-d' }}&grupo={{ reserva.principal_id|default:reserva.pk }}">Agregar otro perro en otra habitación</a></p>{% endif %}
   <p><a href="{% url 'reservaciones' %}">Ver reservaciones</a> · <a href="{% url 'disponibilidad' %}">Nueva búsqueda</a></p>
 {% endblock %}

@@ -83,7 +83,8 @@ def disponibilidad(request):
         entrada = _fecha(request.GET.get("entrada"))
         salida = _fecha(request.GET.get("salida"))
         perro_tam = request.GET.get("perro_tam", "")
-        contexto.update(entrada_txt=request.GET.get("entrada", ""), salida_txt=request.GET.get("salida", ""), perro_tam=perro_tam)
+        contexto.update(entrada_txt=request.GET.get("entrada", ""), salida_txt=request.GET.get("salida", ""), perro_tam=perro_tam,
+                        grupo=request.GET.get("grupo", ""))
         error = _validar_fechas(entrada, salida)
         if not error and perro_tam and perro_tam not in dict(Habitacion.TAMANOS_PERRO):
             error = "Elija un tamaño de perro válido."
@@ -116,6 +117,15 @@ def reservar(request, habitacion_id):
     noches = (salida - entrada).days
     nombre = datos.get("nombre", "").strip()
     telefono = datos.get("telefono", "").strip()
+    principal = None
+    if datos.get("grupo", "").isdigit():  # otro perro del mismo cliente en otra habitación
+        principal = Reserva.objects.filter(pk=int(datos["grupo"])).first()
+        permitido = principal and (rol(request.user) is not None or principal.pk in request.session.get("reservas_propias", []))
+        if not permitido or principal.estado == Reserva.CANCELADA:
+            raise PermissionDenied
+        principal = principal.principal or principal
+        nombre, telefono = principal.nombre, principal.telefono  # el grupo es de un solo cliente
+        contexto["grupo"] = principal.pk
     perro_nombre = datos.get("perro", "").strip()[:80]
     perro2_nombre = datos.get("perro2", "").strip()[:80]
     hora_txt = datos.get("hora_ingreso", "").strip()
@@ -150,6 +160,9 @@ def reservar(request, habitacion_id):
         if request.method == "POST":
             if contexto.get("error"):
                 return render(request, "hotel/reservar.html", contexto, status=400)
+            if perro_nombre and perro_nombre.lower() == perro2_nombre.lower():
+                contexto["error"] = "Los dos perros no pueden llamarse igual."
+                return render(request, "hotel/reservar.html", contexto, status=400)
             if not nombre or not telefono:
                 contexto["error"] = "Escriba su nombre y su teléfono."
                 return render(request, "hotel/reservar.html", contexto, status=400)
@@ -162,8 +175,13 @@ def reservar(request, habitacion_id):
             if perro2_nombre:
                 perro2_ref = cliente.perros.filter(nombre__iexact=perro2_nombre).first() or \
                     Perro.objects.create(cliente=cliente, nombre=perro2_nombre)
+            for ref in (perro_ref, perro2_ref):  # un perro no puede estar en dos habitaciones a la vez
+                if ref and Reserva.objects.filter(entrada__lt=salida, salida__gt=entrada).exclude(estado=Reserva.CANCELADA) \
+                        .filter(Q(perro_ref=ref) | Q(perro2_ref=ref)).exists():
+                    contexto["error"] = f"{ref.nombre} ya tiene una reserva en esas fechas."
+                    return render(request, "hotel/reservar.html", contexto, status=409)
             reserva = Reserva.objects.create(
-                habitacion=habitacion, nombre=nombre, telefono=telefono, entrada=entrada, salida=salida,
+                habitacion=habitacion, nombre=nombre, telefono=telefono, entrada=entrada, salida=salida, principal=principal,
                 cliente=cliente, perro_ref=perro_ref, perro=perro_nombre,
                 perro2_ref=perro2_ref, perro2=perro2_nombre, hora_ingreso_estimada=hora_ingreso,
                 creada_por=request.user if rol(request.user) else None,
@@ -179,8 +197,10 @@ def reserva_confirmada(request, reserva_id):
     if rol(request.user) is None and reserva_id not in request.session.get("reservas_propias", []):
         raise PermissionDenied
     reserva = get_object_or_404(Reserva, pk=reserva_id)
+    grupo = list(reserva.grupo)
     return render(request, "hotel/confirmada.html",
-                  {"reserva": reserva, "noches": reserva.noches, "total": reserva.total,
+                  {"reserva": reserva, "noches": reserva.noches, "total": reserva.total, "grupo": grupo,
+                   "total_grupo": sum(r.total for r in grupo if r.estado != Reserva.CANCELADA),
                    "anticipo": reserva.anticipo_requerido if settings.ANTICIPO_PORCENTAJE else None,
                    "anticipo_pct": settings.ANTICIPO_PORCENTAJE})
 

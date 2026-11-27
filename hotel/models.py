@@ -216,6 +216,9 @@ class Reserva(models.Model):
     perro = models.CharField(max_length=80, blank=True)  # nombre; si no vino en la reserva se pide en el check-in
     perro2 = models.CharField(max_length=80, blank=True)  # segundo perro en la misma habitación (+50 %)
     perro2_ref = models.ForeignKey(Perro, null=True, blank=True, on_delete=models.PROTECT, related_name="reservas_como_segundo")
+    # Reserva grupal: más de dos perros del mismo cliente se reservan en varias habitaciones (máximo 2 por habitación);
+    # cada habitación es una reserva y las adicionales apuntan a la primera.
+    principal = models.ForeignKey("self", null=True, blank=True, on_delete=models.SET_NULL, related_name="adicionales")
     creada_por = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="+")  # vacío si reservó el cliente solo
     checkin_por = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
     checkout_por = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
@@ -258,6 +261,15 @@ class Reserva(models.Model):
         if self.perro or self.perro2:
             return f"perro {self.perro or self.perro2}"
         return ""
+
+    @property
+    def grupo(self):
+        """Todas las reservas del mismo grupo (incluida esta), en orden de habitación; vacío si no es grupal."""
+        raiz = self.principal or self
+        ids = [raiz.pk] + list(raiz.adicionales.values_list("pk", flat=True))
+        if len(ids) == 1:
+            return Reserva.objects.none()
+        return Reserva.objects.filter(pk__in=ids).select_related("habitacion").order_by("habitacion__numero")
 
     @property
     def mascotas_texto(self):

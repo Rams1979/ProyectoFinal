@@ -272,7 +272,10 @@ class ClientesTests(TestCase):
 
     def test_reserva_registra_cliente_y_perro_sin_duplicar(self):
         self._reservar()
-        self._reservar(tel="8888", hab=2)  # misma persona y mismo perro, otra habitación
+        # misma persona y mismo perro en otras fechas; el mismo perro en las mismas fechas ya no se admite
+        self.assertEqual(self._reservar(tel="8888", hab=2).status_code, 409)
+        self.client.post("/reservar/2/", {"entrada": str(self.hoy + timedelta(days=10)), "salida": str(self.hoy + timedelta(days=12)),
+                                          "nombre": "Ana", "telefono": "8888", "perro": "Rocky"})
         from hotel.models import Cliente, Perro
         self.assertEqual(Cliente.objects.count(), 1)
         self.assertEqual(Perro.objects.count(), 1)
@@ -1655,3 +1658,47 @@ class DatosDemoTests(TestCase):
         Cliente.objects.create(nombre="Real", telefono="7000-0000")
         with self.assertRaises(CommandError):
             call_command("datos_demo", clientes=3, meses=1, verbosity=0)
+
+
+class ReservaGrupalTests(TestCase):
+    def setUp(self):
+        self.hoy = timezone.localdate()
+        self.e, self.s = self.hoy + timedelta(days=5), self.hoy + timedelta(days=8)
+        self.base = {"entrada": self.e.isoformat(), "salida": self.s.isoformat()}
+
+    def primera(self):
+        r = self.client.post("/reservar/26/", {**self.base, "nombre": "Ana", "telefono": "8000-1", "perro": "Rocky", "perro2": "Luna"})
+        self.assertEqual(r.status_code, 302)
+        return Reserva.objects.get(habitacion__numero=26)
+
+    def test_tercer_perro_en_otra_habitacion_queda_en_el_grupo(self):
+        r1 = self.primera()
+        pagina = self.client.get(f"/reserva/{r1.pk}/")
+        self.assertContains(pagina, "Agregar otro perro en otra habitación")
+        self.assertContains(pagina, f"grupo={r1.pk}")
+        # la búsqueda y el botón reservar conservan el grupo y no piden otra vez los datos del cliente
+        busca = self.client.get("/disponibilidad/", {**self.base, "grupo": r1.pk})
+        self.assertContains(busca, f"grupo={r1.pk}")
+        form = self.client.get("/reservar/27/", {**self.base, "grupo": r1.pk})
+        self.assertNotContains(form, 'name="nombre"')
+        r = self.client.post("/reservar/27/", {**self.base, "grupo": r1.pk, "perro": "Bruno"})
+        self.assertEqual(r.status_code, 302)
+        r2 = Reserva.objects.get(habitacion__numero=27)
+        self.assertEqual((r2.principal, r2.telefono, r2.cliente), (r1, "8000-1", r1.cliente))
+        self.assertEqual(sorted(x.pk for x in r1.grupo), sorted([r1.pk, r2.pk]))
+        self.assertContains(self.client.get(f"/reserva/{r2.pk}/"), "Total del grupo")
+        # una cuarta mascota enlaza con la primera, no con la segunda
+        self.client.post("/reservar/28/", {**self.base, "grupo": r2.pk, "perro": "Toby"})
+        self.assertEqual(Reserva.objects.get(habitacion__numero=28).principal, r1)
+
+    def test_maximo_dos_por_habitacion_y_perro_no_se_repite(self):
+        r1 = self.primera()
+        self.assertEqual(self.client.post("/reservar/1/", {**self.base, "nombre": "Zoe", "telefono": "8000-2", "perro": "A", "perro2": "B"}).status_code, 400)
+        r = self.client.post("/reservar/27/", {**self.base, "grupo": r1.pk, "perro": "Rocky"})  # Rocky ya está reservado
+        self.assertEqual(r.status_code, 409)
+        self.assertFalse(Reserva.objects.filter(habitacion__numero=27).exists())
+
+    def test_un_visitante_no_enlaza_a_reservas_ajenas(self):
+        r1 = self.primera()
+        self.client.cookies.clear()
+        self.assertEqual(self.client.post("/reservar/27/", {**self.base, "grupo": r1.pk, "perro": "Bruno"}).status_code, 403)

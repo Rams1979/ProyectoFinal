@@ -1,7 +1,7 @@
 {% extends "hotel/base.html" %}
 {% block contenido %}
   <h2>Disponibilidad</h2>
-  <form class="filtros" method="get">
+  <form class="filtros" method="get">{% if grupo %}<input type="hidden" name="grupo" value="{{ grupo }}">{% endif %}
     <label>Entrada <input type="date" name="entrada" value="{{ entrada_txt }}" min="{{ hoy }}" required></label>
     <label>Salida <input type="date" name="salida" value="{{ salida_txt }}" min="{{ hoy }}" required></label>
     <label>Tamaño del perro <select name="perro_tam"><option value="">Cualquiera</option>{% for k, e in tamanos_perro %}<option value="{{ k }}"{% if k == perro_tam %} selected{% endif %}>{{ e }}</option>{% endfor %}</select></label>
@@ -17,7 +17,7 @@
           <span>{{ h.get_tamano_display }}</span>
           <span>Peso recomendado: {{ h.peso_recomendado }}</span>
           <span class="precio">${{ total|floatformat:0 }} <small>por {{ noches }} noche{{ noches|pluralize }}</small></span>
-          <a class="boton" href="{% url 'reservar' h.pk %}?entrada={{ entrada_txt }}&salida={{ salida_txt }}{% if perro_tam %}&perro_tam={{ perro_tam }}{% endif %}">Reservar</a>
+          <a class="boton" href="{% url 'reservar' h.pk %}?entrada={{ entrada_txt }}&salida={{ salida_txt }}{% if perro_tam %}&perro_tam={{ perro_tam }}{% endif %}{% if grupo %}&grupo={{ grupo }}{% endif %}">Reservar</a>
         </li>
       {% empty %}
         <li>No hay habitaciones libres para esas fechas.</li>
