@@ -4,54 +4,77 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block titulo %}Inu no Hoteru 犬のホテル{% endblock %}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700&family=Shippori+Mincho:wght@500;700;800&display=swap">
   <style>
-    body { font-family: system-ui, sans-serif; max-width: 760px; margin: 2rem auto; padding: 0 1rem; color: #222; }
-    h1 { margin-bottom: .25rem; }
-    nav a { margin-right: 1rem; }
-    .nota { color: #666; margin-top: 0; }
-    .error { color: #b00020; }
-    ul.lista { list-style: none; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: .5rem; }
-    ul.lista li { border: 1px solid #ccc; border-radius: 8px; padding: .6rem .8rem; display: flex; justify-content: space-between; gap: .5rem; }
+    :root { --bg:#fff; --ink:#16241B; --muted:#55645A; --moss:#1F4D36; --leaf:#7FA77A; --tint:#E3ECDD; --line:#D3DECD; --seal:#B8402B;
+            --font-display:"Shippori Mincho","Hiragino Mincho ProN","Yu Mincho",Georgia,serif; --font-body:"Hanken Grotesk","Segoe UI",system-ui,sans-serif; }
+    * { box-sizing: border-box; }
+    body { font-family: var(--font-body); font-size: 16px; line-height: 1.55; margin: 0; color: var(--ink); background: var(--bg); }
+    h1, h2, h3 { font-family: var(--font-display); line-height: 1.15; color: var(--ink); }
+    h2 { font-size: clamp(26px, 4vw, 36px); font-weight: 800; margin: 1.2rem 0 .6rem; }
+    h3 { font-size: 21px; font-weight: 700; margin: 1.4rem 0 .5rem; }
+    a { color: var(--moss); }
+    :focus-visible { outline: 3px solid var(--seal); outline-offset: 3px; border-radius: 4px; }
+    .wrap { max-width: 1120px; margin-inline: auto; padding: 0 16px; }
+    main.wrap { padding-top: 1rem; padding-bottom: 3rem; }
+    .topbar { position: sticky; top: 0; z-index: 30; background: rgba(255,255,255,.92); backdrop-filter: blur(8px); border-bottom: 1px solid var(--line); }
+    .topbar-in { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; padding-block: 10px; }
+    .brand { display: flex; align-items: center; gap: 12px; text-decoration: none; color: var(--ink); margin-right: auto; }
+    .brand b { font-family: var(--font-display); font-size: 26px; font-weight: 800; line-height: 1.05; }
+    .brand span { font-family: var(--font-display); font-size: 34px; font-weight: 500; color: var(--seal); line-height: 1; }
+    nav.nav { display: flex; flex-wrap: wrap; align-items: center; gap: 2px; }
+    nav.nav a { text-decoration: none; font-size: 15px; font-weight: 500; padding: 8px 12px; border-radius: 14px; color: var(--muted); white-space: nowrap; }
+    nav.nav a:hover { background: var(--tint); color: var(--ink); }
+    .nota { color: var(--muted); font-size: .9rem; margin-top: 0; }
+    .error { color: var(--seal); font-weight: 600; }
+    ul.lista { list-style: none; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: .6rem; }
+    ul.lista li { border: 1px solid var(--line); border-radius: 10px; padding: .7rem .9rem; display: flex; justify-content: space-between; gap: .5rem; }
     form.filtros { display: flex; flex-wrap: wrap; gap: 1rem; align-items: end; margin: 1rem 0; }
-    label { display: flex; flex-direction: column; font-size: .9rem; color: #555; }
-    input, button { font: inherit; padding: .4rem .6rem; }
-    table { border-collapse: collapse; width: 100%; }
-    th, td { text-align: left; padding: .45rem .6rem; border-bottom: 1px solid #ddd; }
-    th { background: #f3f3f0; }
-    a.boton { border: 2px solid #1a73e8; background: #e8f0fe; border-radius: 6px; padding: .25rem .6rem; font-weight: 600; text-decoration: none; color: #222; }
-    #msgs { border: 1px solid #ccc; border-radius: 8px; padding: .6rem; min-height: 240px; max-height: 420px; overflow-y: auto; display: flex; flex-direction: column; gap: .5rem; }
-    .burbuja { padding: .5rem .75rem; border-radius: 10px; max-width: 85%; white-space: pre-wrap; }
-    .yo { align-self: flex-end; background: #e8f0fe; border: 1px solid #1a73e8; }
-    .bot { align-self: flex-start; background: #f3f3f0; border: 1px solid #ccc; }
+    label { display: flex; flex-direction: column; font-size: .9rem; font-weight: 500; color: var(--muted); }
+    input, select, textarea, button { font: inherit; padding: .5rem .7rem; color: var(--ink); }
+    input, select, textarea { border: 1.5px solid var(--line); border-radius: 8px; background: #fff; }
+    table { border-collapse: collapse; width: 100%; margin-bottom: 1rem; }
+    th, td { text-align: left; padding: .55rem .7rem; border-bottom: 1px solid var(--line); }
+    th { background: var(--tint); font-family: var(--font-display); font-weight: 700; }
+    button, a.boton { display: inline-block; border: 2px solid var(--moss); background: var(--moss); color: #fff; border-radius: 999px; padding: .45rem 1.1rem; font-weight: 600; text-decoration: none; cursor: pointer; }
+    button:hover, a.boton:hover { filter: brightness(1.12); }
+    button.chico { padding: .2rem .8rem; font-size: .85rem; background: transparent; color: var(--moss); }
+    button.chico:hover { background: var(--tint); filter: none; }
+    #msgs { border: 1px solid var(--line); border-radius: 10px; padding: .7rem; min-height: 240px; max-height: 420px; overflow-y: auto; display: flex; flex-direction: column; gap: .5rem; }
+    .burbuja { padding: .5rem .8rem; border-radius: 12px; max-width: 85%; white-space: pre-wrap; }
+    .yo { align-self: flex-end; background: var(--moss); color: #fff; }
+    .bot { align-self: flex-start; background: var(--tint); }
     .panel { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: .6rem; list-style: none; padding: 0; }
-    .panel li { border: 2px solid #ccc; border-radius: 8px; padding: .5rem .6rem; font-size: .9rem; display: flex; flex-direction: column; gap: .25rem; }
-    .panel li.ocupada { border-color: #1a73e8; background: #e8f0fe; }
+    .panel li { border: 2px solid var(--line); border-radius: 10px; padding: .55rem .7rem; font-size: .9rem; display: flex; flex-direction: column; gap: .25rem; }
+    .panel li.ocupada { border-color: var(--moss); background: var(--tint); }
     .panel li.llega { border-color: #b26a00; background: #fff4e0; }
     .panel li.mantenimiento { border-color: #8e24aa; background: #f6e9fa; }
     .panel li.limpieza { border-color: #777; background: #f0f0f0; border-style: dashed; }
-    .panel li.libre { border-color: #2e7d32; }
-    .menu { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: .8rem; list-style: none; padding: 0; }
-    .menu a { display: flex; flex-direction: column; gap: .3rem; border: 2px solid #1a73e8; border-radius: 8px; padding: .8rem; text-decoration: none; color: inherit; height: 100%; box-sizing: border-box; }
-    .menu a:hover { background: #e8f0fe; }
-    .menu strong { font-size: 1.1rem; }
-    .menu small { color: #555; }
-    .barra { background: #eee; border-radius: 4px; height: .9rem; min-width: 120px; }
-    .barra span { display: block; height: 100%; background: #1a73e8; border-radius: 4px; }
+    .panel li.libre { border-color: var(--leaf); }
+    .menu { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 14px; list-style: none; padding: 0; }
+    .menu a { display: flex; flex-direction: column; gap: .3rem; border: 1px solid var(--line); border-radius: 10px; padding: 20px; text-decoration: none; color: inherit; height: 100%; }
+    .menu a:hover { border-color: var(--moss); background: var(--tint); }
+    .menu strong { font-family: var(--font-display); font-size: 1.2rem; }
+    .menu small { color: var(--muted); font-size: .95rem; }
+    .barra { background: var(--tint); border-radius: 4px; height: .9rem; min-width: 120px; }
+    .barra span { display: block; height: 100%; background: var(--moss); border-radius: 4px; }
     .tarjetas { display: flex; flex-wrap: wrap; gap: .6rem; margin: .5rem 0 1rem; }
-    .tarjetas div { border: 1px solid #ccc; border-radius: 8px; padding: .5rem .9rem; }
-    .tarjetas strong { display: block; font-size: 1.4rem; }
+    .tarjetas div { border: 1px solid var(--line); border-radius: 10px; padding: .6rem 1rem; color: var(--muted); font-size: .9rem; }
+    .tarjetas strong { display: block; font-family: var(--font-display); font-size: 1.6rem; color: var(--ink); }
     .hecha { text-decoration: line-through; color: #777; }
-    .aviso { background: #fff4e0; border: 1px solid #b26a00; border-radius: 6px; padding: .3rem .6rem; }
+    .aviso { background: #fff4e0; border: 1px solid #b26a00; border-radius: 8px; padding: .3rem .7rem; }
     .resumen { display: flex; flex-wrap: wrap; gap: .5rem 1.2rem; margin: .5rem 0 1rem; }
-    .resumen strong { font-size: 1.3rem; }
+    .resumen strong { font-family: var(--font-display); font-size: 1.3rem; }
     form.en-linea { display: inline; margin: 0; }
-    button.chico { padding: .15rem .5rem; font-size: .85rem; }
-    button { border: 2px solid #1a73e8; background: #e8f0fe; border-radius: 6px; cursor: pointer; font-weight: 600; }
+    footer.pie { border-top: 1px solid var(--line); color: var(--muted); font-size: 14px; padding-block: 18px; }
   </style>
 </head>
 <body>
-  <h1>Inu no Hoteru 犬のホテル</h1>
-  <nav>
+<header class="topbar"><div class="wrap topbar-in">
+  <a class="brand" href="{% url 'inicio' %}" aria-label="Inu no Hoteru, inicio"><b>Inu no Hoteru</b><span>犬のホテル</span></a>
+  <nav class="nav">
     {% if rol %}
       <a href="{% url 'inicio' %}">Menú</a><a href="{% url 'disponibilidad' %}">Disponibilidad</a>{% if "panel" in areas %}<a href="{% url 'panel' %}">Panel</a>{% endif %}{% if "reservas" in areas %}<a href="{% url 'reservaciones' %}">Reservaciones</a>{% endif %}{% if "cuidado" in areas %}<a href="{% url 'cuidado' %}">Cuidado</a>{% endif %}{% if "caja" in areas %}<a href="{% url 'caja' %}">Caja</a>{% endif %}{% if "clientes" in areas %}<a href="{% url 'clientes' %}">Clientes</a>{% endif %}<a href="{% url 'chat' %}">Chat</a>{% if "habitaciones" in areas %}<a href="{% url 'habitaciones' %}">Habitaciones</a><a href="{% url 'articulos' %}">Artículos</a>{% endif %}{% if "reportes" in areas %}<a href="{% url 'reportes' %}">Reportes</a>{% endif %}{% if "solicitudes" in areas %}<a href="{% url 'solicitudes' %}">Solicitudes</a>{% endif %}{% if "usuarios" in areas %}<a href="{% url 'usuarios' %}">Usuarios</a><a href="{% url 'perfiles' %}">Perfiles</a>{% endif %}
       <form class="en-linea" method="post" action="{% url 'logout' %}">{% csrf_token %}<button class="chico" type="submit">Salir ({{ user.first_name|default:user.username }} · {{ rol }})</button></form><a href="{% url 'cambiar_clave' %}">Mi contraseña</a>
@@ -59,7 +82,10 @@
       <a href="{% url 'inicio' %}">Inicio</a><a href="{% url 'disponibilidad' %}">Disponibilidad</a><a href="{% url 'chat' %}">Chat</a><a href="{% url 'login' %}">Ingreso del personal</a>
     {% endif %}
   </nav>
-  <p class="nota">Prototipo conceptual con datos de ejemplo.</p>
+</div></header>
+<main class="wrap">
   {% block contenido %}{% endblock %}
+</main>
+<footer class="pie"><div class="wrap">Prototipo conceptual con datos de ejemplo.</div></footer>
 </body>
 </html>
