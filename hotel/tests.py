@@ -990,3 +990,80 @@ class ArticulosTests(TestCase):
         self.client.post("/salir/")
         entrar(self.client, "Cuidador", "cuido")
         self.assertEqual(self.client.get("/articulos/").status_code, 403)
+
+
+class CrearAdminTests(TestCase):
+    """Valores ficticios: nunca poner aquí credenciales reales (el repositorio es público)."""
+
+    USUARIO = "admin-prueba"
+    CLAVE_1 = "clave-ficticia-uno-1"
+    CLAVE_2 = "clave-ficticia-dos-2"
+
+    def _correr(self, **env):
+        import os
+        from io import StringIO
+        antes = {k: os.environ.pop(k, None) for k in ("ADMIN_USERNAME", "ADMIN_PASSWORD", "ADMIN_RESTABLECER")}
+        os.environ.update(env)
+        salida = StringIO()
+        try:
+            call_command("crear_admin", stdout=salida)
+        finally:
+            for k in antes:
+                os.environ.pop(k, None)
+                if antes[k] is not None:
+                    os.environ[k] = antes[k]
+        return salida.getvalue()
+
+    def test_crea_el_administrador_y_entra(self):
+        self.assertIn("creado", self._correr(ADMIN_USERNAME=self.USUARIO, ADMIN_PASSWORD=self.CLAVE_1))
+        r = self.client.post("/ingresar/", {"username": self.USUARIO, "password": self.CLAVE_1})
+        self.assertEqual(r.status_code, 302)
+        self.assertEqual(self.client.get("/usuarios/").status_code, 200)
+
+    def test_limpia_espacios_y_comillas_de_las_variables(self):
+        self._correr(ADMIN_USERNAME=f' "{self.USUARIO}" ', ADMIN_PASSWORD=f" '{self.CLAVE_1}' ")
+        self.assertTrue(User.objects.get(username=self.USUARIO).check_password(self.CLAVE_1))
+
+    def test_un_usuario_que_nunca_ingreso_toma_la_clave_de_la_variable(self):
+        self._correr(ADMIN_USERNAME=self.USUARIO, ADMIN_PASSWORD=self.CLAVE_1)
+        salida = self._correr(ADMIN_USERNAME=self.USUARIO, ADMIN_PASSWORD=self.CLAVE_2)
+        self.assertIn("restablecido", salida)
+        self.assertTrue(User.objects.get(username=self.USUARIO).check_password(self.CLAVE_2))
+        self.assertEqual(self.client.post("/ingresar/", {"username": self.USUARIO, "password": self.CLAVE_2}).status_code, 302)
+
+    def test_tras_ingresar_la_clave_ya_no_se_cambia_salvo_restablecer(self):
+        self._correr(ADMIN_USERNAME=self.USUARIO, ADMIN_PASSWORD=self.CLAVE_1)
+        self.client.post("/ingresar/", {"username": self.USUARIO, "password": self.CLAVE_1})  # primer ingreso
+        salida = self._correr(ADMIN_USERNAME=self.USUARIO, ADMIN_PASSWORD=self.CLAVE_2)
+        self.assertIn("ya ingresó antes", salida)
+        self.assertIn("ADMIN_RESTABLECER=1", salida)
+        self.assertTrue(User.objects.get(username=self.USUARIO).check_password(self.CLAVE_1))
+        salida = self._correr(ADMIN_USERNAME=self.USUARIO, ADMIN_PASSWORD=self.CLAVE_2, ADMIN_RESTABLECER="1")
+        self.assertIn("ADMIN_RESTABLECER=1", salida)
+        self.assertTrue(User.objects.get(username=self.USUARIO).check_password(self.CLAVE_2))
+
+    def test_borra_la_cuenta_duplicada_con_espacios_y_crea_la_limpia(self):
+        User.objects.create_superuser(username=self.USUARIO + " ", password=self.CLAVE_1)  # lo que dejaba un valor mal pegado
+        salida = self._correr(ADMIN_USERNAME=self.USUARIO, ADMIN_PASSWORD=self.CLAVE_1)
+        self.assertIn("duplicada", salida)
+        self.assertEqual(list(User.objects.values_list("username", flat=True)), [self.USUARIO])
+        self.assertEqual(self.client.post("/ingresar/", {"username": self.USUARIO, "password": self.CLAVE_1}).status_code, 302)
+
+    def test_informa_la_base_de_datos_sin_credenciales(self):
+        salida = self._correr(ADMIN_USERNAME=self.USUARIO, ADMIN_PASSWORD=self.CLAVE_1)
+        self.assertIn("base de datos", salida)
+        self.assertNotIn(self.CLAVE_1, salida)
+
+    def test_restablecer_reactiva_y_devuelve_el_perfil(self):
+        self._correr(ADMIN_USERNAME=self.USUARIO, ADMIN_PASSWORD=self.CLAVE_1)
+        u = User.objects.get(username=self.USUARIO)
+        u.is_active = False
+        u.save()
+        PerfilUsuario.objects.filter(usuario=u).update(perfil=Perfil.objects.get(nombre="Cuidador"))
+        self._correr(ADMIN_USERNAME=self.USUARIO, ADMIN_PASSWORD=self.CLAVE_2, ADMIN_RESTABLECER="1")
+        r = self.client.post("/ingresar/", {"username": self.USUARIO, "password": self.CLAVE_2})
+        self.assertEqual(r.status_code, 302)
+        self.assertEqual(self.client.get("/usuarios/").status_code, 200)
+
+    def test_sin_variables_avisa_y_no_falla(self):
+        self.assertIn("faltan ADMIN_USERNAME", self._correr())
