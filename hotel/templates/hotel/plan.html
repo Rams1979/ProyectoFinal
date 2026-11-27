@@ -1,7 +1,7 @@
 {% extends "hotel/base.html" %}
 {% block contenido %}
   <h2>Plan de cuidado · {{ reserva.habitacion }}</h2>
-  <p>{{ reserva.perros_texto|capfirst }} · {{ reserva.nombre }}</p>
+  <p>{{ reserva.mascotas_texto|capfirst }} · {{ reserva.nombre }}</p>
   {% if error %}<p class="error">{{ error }}</p>{% endif %}
   {% if not bloqueado %}
   <table>

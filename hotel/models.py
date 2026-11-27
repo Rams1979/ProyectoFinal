@@ -260,6 +260,14 @@ class Reserva(models.Model):
         return ""
 
     @property
+    def mascotas_texto(self):
+        if self.perro and self.perro2:
+            return f"mascotas {self.perro} y {self.perro2}"
+        if self.perro or self.perro2:
+            return f"mascota {self.perro or self.perro2}"
+        return ""
+
+    @property
     def pagado(self):
         """Pagos menos devoluciones."""
         pagos = self.pagos.aggregate(
